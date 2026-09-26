@@ -1,18 +1,49 @@
-# AIS RX experiment (channel B, 162.025 MHz)
+# AIS RX — Dr. Heinz Doofenshmirtz (channel B, 162.025 MHz)
 
 **Status: bench probe only. NO working AIS GMSK receiver yet. NO on-air
 decodes and NO real AIS bitstream claimed.** This branch is intentionally
 independent of the production APRS image on `main`.
 
-## Build
+## Build and expected first result
+
+Author byline for these **experimental AIS additions**: **Dr. Heinz
+Doofenshmirtz** (`DR.H.DOOF` in the limited UV-K5 screen). All known prior
+authors and the unchanged licensing are recorded in
+[`AUTHORS.md`](../AUTHORS.md) and [`LICENSE`](../LICENSE).
+
+This **AIS branch builds AIS RX by default** (`ENABLE_AIS_RX?=1`).
+The explicit switch below documents the intended binary and prevents
+accidentally building the legacy APRS edition:
 
 ```sh
+git clone --branch ais-rx https://github.com/DE8MSH/uv-k5-firmware-ta1js.git
+cd uv-k5-firmware-ta1js
 make clean
-make ENABLE_AIS_RX=1
+make -j4 ENABLE_AIS_RX=1
+arm-none-eabi-size f4hwn
+wc -c f4hwn.bin
 cc -std=c11 -Wall -Wextra -Werror -Iapp \
    app/ais_bits.c utils/ais_bits_test.c -o /tmp/ais_bits_test
 /tmp/ais_bits_test
 ```
+
+Use `arm-none-eabi-gcc` **10.3.1**, matching the separate
+[experimental GitHub Actions workflow](../.github/workflows/ais-rx.yml).
+The raw `f4hwn.bin` must fit within **61,440 bytes**. Alternatively, run
+`./compile-with-docker.sh aisrx` to get
+`compiled-firmware/ais-rx-162025-rx-only.bin`; the new `aisrx` case
+avoids the legacy script's global Docker prune. The CI workflow publishes
+a short-lived artifact named `AIS-RX-EXPERIMENTAL-NOT-DECODED`, not an
+APRS release.
+
+**On the first boot:** the welcome display should show
+`DR.H.DOOF v0.1` and `AIS-RX Edition`; the BK4819 should be configured
+to receive at 162.025 MHz and present an *experimental* AF bypass at
+the analogue audio output. The signal may be absent or unsuitable until
+hardware measurements establish the actual bandwidth. **No AIS vessel,
+MMSI, position, CRC pass or live GMSK symbols are displayed or received
+by the embedded checker yet.** The only present AIS bit results are the
+synthetic host test. PTT must be verified to remain disabled before use.
 
 `ENABLE_AIS_RX=1` turns APRS and AM compensation off, enables all-band
 **reception** and disables the sleep feature. PTT and entry into transmit mode
