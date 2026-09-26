@@ -2,9 +2,10 @@
 
 > **AIS-Laborversion, kein fertiger AIS-Decoder.** Dieser Branch `ais-rx`
 > startet den Quansheng UV-K5/K6/5R als **reinen Empfänger auf AIS-Kanal B
-> (162,025 MHz)**. Die GMSK-Demodulation eines echten Funksignals ist
-> **noch nicht implementiert**. Die eigenständige Bit-/HDLC-/CRC-Prüfung
-> funktioniert bisher nur mit künstlich erzeugten Testdaten.
+> (162,025 MHz)**. Die GMSK-Demodulation ist in der **Funkgeräte-Firmware noch nicht
+> implementiert**. Ein neuer C-Decoder für den **PC** kann bereits
+> künstliche, gaußgefilterte AIS-Diskriminator-Aufnahmen einschließlich
+> NRZI/HDLC/CRC auswerten; reale BK4819-Aufnahmen sind noch ungetestet.
 
 **AIS-Zweig: Dr. Heinz Doofenshmirtz.** Auf dem kleinen Display erscheint
 dafür die Kurzform `DR.H.DOOF`. Die vollständige Liste der früheren Autoren,
@@ -20,9 +21,14 @@ APRS-Ausgangszweig bleibt unverändert auf [`main`](../../tree/main).
 - Squelch für den anfänglichen Empfangsversuch umgehen und den
   Energiesparmodus abschalten.
 - **Nur RX:** PTT und mehrere interne Wege in den TX-Modus sind gesperrt.
-- Mit dem unabhängigen, bereits programmierten C-Testmodul künstliche
-  9.600-bit/s-NRZI/HDLC-Daten auf AIS-Flags, Bit-Stuffing, CRC-16/X-25,
-  AIS-Nachrichtentyp und MMSI prüfen.
+- Mit dem unabhängigen C-Modul künstliche 9.600-bit/s-NRZI/HDLC-Daten
+  auf AIS-Flags, Bit-Stuffing, CRC-16/X-25, Nachrichtentyp und MMSI prüfen.
+- Mit dem neuen **PC-Audiodecoder** künstlich erzeugte GMSK-
+  Diskriminator-Aufnahmen bei 48/96 kHz bis zur gültigen AIS-CRC decodieren.
+- Wahlweise **zwei Empfangs-Audiowege** kompilieren: AF9 (Beken-Digital-
+  Bypass, Standard) und AF1 (ungefilterter FM-Audioweg, Kontrollversuch).
+  Der UART gibt nach dem Start eine Zeile mit den gelesenen BK4819-
+  Registern aus.
 
 **Was ausdrücklich noch nicht geht:** echte GMSK-Symbole aus dem BK4819
 gewinnen, reale AIS-Pakete empfangen/decodieren oder MMSI, Schiffsnamen,
@@ -57,9 +63,10 @@ absichtlich nochmals ausdrücklich im Befehl.
 Jeder Push auf `ais-rx` startet den separaten
 [GitHub-Actions-Build „AIS RX experimental build“](../../actions/workflows/ais-rx.yml).
 Dort den letzten **erfolgreichen Lauf** öffnen, unter **Artifacts** das
-`AIS-RX-EXPERIMENTAL-NOT-DECODED`-Archiv laden und entpacken.
-Es enthält ebenfalls die rohe `f4hwn.bin`; diese Test-Artefakte werden
-nur **sieben Tage** aufbewahrt. Sie gehören nicht zu den regulären
+`AIS-RX-AF9-AF1-EXPERIMENTAL`-Archiv laden und entpacken.
+Es enthält die beiden rohen Test-Firmwares `ais-rx-af9-digital-bypass.bin`
+(Standard) und `ais-rx-af1-fm-audio.bin` (Kontrollversuch). Diese
+Test-Artefakte werden nur **sieben Tage** aufbewahrt. Sie gehören nicht zu den regulären
 APRS-Releases und sind ausdrücklich keine getesteten AIS-Empfangsgeräte.
 
 ### Optional: Docker
@@ -75,6 +82,61 @@ Die angepasste Version des vorhandenen Skripts unterstützt `aisrx`:
 frühere globale `docker system prune`. Die weiterhin vorhandenen alten
 Docker-Buildvarianten können dagegen ungenutzte Docker-Ressourcen bereinigen.
 
+## Zweiter Meilenstein: zwei Audio-Routen und PC-WAV-Decoder
+
+Wir haben **AF9 und AF1 getrennt gebaut**, damit sich überprüfen lässt,
+welcher Weg die schnellen 9.600-bit/s-GMSK-Signale tatsächlich bis zum
+Audioausgang durchlässt. Dabei ist **nicht** vorausgesetzt, dass beide
+Wege funktionieren. Der BK4819 gibt beim Start über die bestehende UART
+eine Zeile dieser Form aus:
+
+```text
+AISRX 162.025 AF9 38=.... 39=.... 43=.... 2B=.... 47=.... 58=....
+```
+
+Diese Zeile bestätigt die Registerwerte, **nicht** den erfolgreichen
+AIS-Empfang. Eine eigene `AF1`-Firmware entsteht lokal so:
+
+```bash
+make clean
+make -j4 ENABLE_AIS_RX=1 AIS_AF_ROUTE=1
+cp f4hwn.bin ais-rx-af1-fm-audio.bin
+```
+
+**PC-Decoder kompilieren** (Linux/macOS; ein gewöhnlicher C-Compiler reicht):
+
+```bash
+cc -std=c11 -O2 -Wall -Wextra -Iapp \
+  app/ais_bits.c utils/ais_af_decode.c utils/ais_af_wav.c \
+  -lm -o ais_af_wav
+```
+
+Am Funkgerät ein paar Sekunden von Kanal B aufnehmen: Kopfhörer/AF-Ausgang
+mit geeignet gedämpftem Audioeingang verbinden und **mono PCM16 mit
+96 kHz** aufnehmen (48 kHz wird ebenfalls unterstützt). Das
+Testprogramm akzeptiert **nur WAV-Dateien mit Mono-PCM16, 48/96 kHz**;
+keine Stereo-Dateien, MP3s oder komplexen SDR-I/Q-Samples. Bei Bedarf
+eine bereits vorhandene Aufnahme mit FFmpeg konvertieren:
+
+```bash
+ffmpeg -i af9-recording.wav -ar 96000 -ac 1 -c:a pcm_s16le af9-mono96.wav
+./ais_af_wav af9-mono96.wav
+```
+
+Die Ausgabe nennt Audiopegel, gefundene HDLC-Flags und CRC-geprüfte
+AIS-Nachrichten (zunächst **Typ und MMSI**, noch keine Positionen).
+**Keine gültige CRC** bedeutet nicht automatisch, dass kein Schiff
+sendet: RX-Bypass, Audiohardware, Filter, Pegel, Signalqualität oder
+Symboltiming können die Ursache sein.
+
+Der PC-Algorithmus ist vorerst ein bewusst einfacher Laborversuch:
+langsamer DC-Abgleich, gaußförmiger Matched Filter (BT=0,4), 16
+Timing-Hypothesen, NRZI- und HDLC-Decodierung mit CRC-16/X-25.
+Die GitHub-Actions-Tests bestätigen dies für **synthetische**
+48-/96-kHz-Aufnahmen, für invertierte Polarität sowie für manipulierte
+CRC und reines Rauschen. Es liegt **noch keine nachgewiesene
+On-Air-Decodierung** mit dem UV-K5 vor.
+
 ## Das erste erwartete Ergebnis am UV-K5
 
 Nach dem Flashen sollte der Startbildschirm `DR.H.DOOF v0.1` und
@@ -89,8 +151,9 @@ und **keine AIS-validierten Bits** angezeigt.
 Der erste sinnvolle Hardwaretest ist daher eine Aufnahme des Audioausgangs
 mit mindestens **48 ksample/s**, während ein bekannter AIS-Testburst
 **nur empfangen** wird. Danach prüfen wir Spektrum, Pegel und
-9.600-bit/s-Symbolinformation; erst im nächsten Schritt wird ein
-GMSK-Demodulator mit `AIS_BitsPushNRZI()` verbunden.
+9.600-bit/s-Symbolinformation mit dem neuen PC-WAV-Decoder. Die Übertragung
+auf den Mikrocontroller wäre ein **separater späterer Schritt**, falls
+der BK4819 einen geeigneten Signalzugriff ermöglicht.
 Die Prüfschritte und BK4819-Register sind in
 [docs/AIS_RX.md](docs/AIS_RX.md) dokumentiert.
 
