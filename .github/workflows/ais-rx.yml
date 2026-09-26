@@ -27,20 +27,34 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
              app/ais_bits.c utils/ais_af_decode.c utils/ais_af_wav.c \
              -lm -o /tmp/ais_af_wav
+          /tmp/ais_af_test --wav /tmp/ais_af_valid.wav
+          /tmp/ais_af_wav /tmp/ais_af_valid.wav | tee /tmp/ais_af_valid.log
+          grep -q 'AIS CRC OK: type=1 MMSI=123456789' /tmp/ais_af_valid.log
+          /tmp/ais_af_test --noise /tmp/ais_af_noise.wav
+          /tmp/ais_af_wav /tmp/ais_af_noise.wav | tee /tmp/ais_af_noise.log
+          grep -q 'CRC valid=0' /tmp/ais_af_noise.log
       - name: Check AIS Docker helper shell syntax
         run: sh -n compile-with-docker.sh
       - uses: carlosperate/arm-none-eabi-gcc-action@v1
         with:
           release: '10.3-2021.10'
-      - name: Build the receive-only experimental firmware
+      - name: Build both RX-only AF routes for hardware comparison
         run: |
+          set -eu
+          mkdir -p out
           make clean
-          make -j"$(nproc)" ENABLE_AIS_RX=1
-          size=$(stat -c%s f4hwn.bin)
-          echo "Experimental AIS RX image: $size / 61440 bytes"
-          test "$size" -le 61440
+          make -j"$(nproc)" ENABLE_AIS_RX=1 AIS_AF_ROUTE=9
+          cp f4hwn.bin out/ais-rx-af9-digital-bypass.bin
+          make clean
+          make -j"$(nproc)" ENABLE_AIS_RX=1 AIS_AF_ROUTE=1
+          cp f4hwn.bin out/ais-rx-af1-fm-audio.bin
+          for file in out/*.bin; do
+            size=$(stat -c%s "$file")
+            echo "$(basename "$file"): $size / 61440 bytes"
+            test "$size" -le 61440
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: AIS-RX-EXPERIMENTAL-NOT-DECODED
-          path: f4hwn.bin
+          name: AIS-RX-AF9-AF1-EXPERIMENTAL
+          path: out/*.bin
           retention-days: 7
