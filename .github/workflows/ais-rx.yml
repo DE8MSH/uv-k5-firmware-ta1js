@@ -18,6 +18,15 @@ jobs:
           cc -std=c11 -Wall -Wextra -Werror -Iapp \
              app/ais_bits.c utils/ais_bits_test.c -o /tmp/ais_bits_test
           /tmp/ais_bits_test
+      - name: Test synthetic 9.6-kbaud AIS discriminator-audio receiver
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
+             app/ais_bits.c utils/ais_af_decode.c utils/ais_af_test.c \
+             -lm -o /tmp/ais_af_test
+          /tmp/ais_af_test
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
+             app/ais_bits.c utils/ais_af_decode.c utils/ais_af_wav.c \
+             -lm -o /tmp/ais_af_wav
       - name: Check AIS Docker helper shell syntax
         run: sh -n compile-with-docker.sh
       - uses: carlosperate/arm-none-eabi-gcc-action@v1
