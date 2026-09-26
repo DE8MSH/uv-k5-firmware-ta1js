@@ -19,6 +19,9 @@
 
 #include "app/chFrScanner.h"
 #include "app/dtmf.h"
+#ifdef ENABLE_AIS_RX
+    #include "app/ais_diag.h"
+#endif
 #ifdef ENABLE_APRS
     #include "app/aprs_minimal.h"
 #endif
@@ -542,6 +545,21 @@ void UI_DisplayMain(void)
         ST7565_BlitFullScreen();
         return;
     }
+#ifdef ENABLE_AIS_RX
+    /* Independent on-device field test. RSSI envelope is NOT GMSK:
+     * these are possible RF bursts, not decoded AIS messages. */
+    UI_PrintStringSmallBold("AIS RX / RF TEST", 2, 0, 0);
+    UI_PrintString("162.025", 0, LCD_WIDTH, 1, 8);
+    UI_PrintStringSmallNormal("RX ONLY  |  NO TX", 2, 0, 3);
+    sprintf(String, "RSSI %d dBm",
+        (int)((gAisDiagnostic.last_rssi / 2u) - 160));
+    UI_PrintStringSmallNormal(String, 2, 0, 4);
+    sprintf(String, "RF PULSES: %u", gAisDiagnostic.rf_pulses);
+    UI_PrintStringSmallNormal(String, 2, 0, 5);
+    UI_PrintStringSmallNormal("NO AIS DECODE YET", 2, 0, 6);
+    ST7565_BlitFullScreen();
+    return;
+#endif
 
 #ifndef ENABLE_FEAT_F4HWN
     if (gEeprom.KEY_LOCK && gKeypadLocked > 0)
