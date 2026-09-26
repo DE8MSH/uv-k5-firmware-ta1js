@@ -42,6 +42,14 @@ ENABLE_BYP_RAW_DEMODULATORS     ?= 0
 ENABLE_BLMIN_TMP_OFF            ?= 0
 ENABLE_SCAN_RANGES              ?= 1
 ENABLE_APRS                     ?= 1
+# Experimental receive-only AIS channel B probe; overrides APRS and TX bands.
+ENABLE_AIS_RX                   ?= 0
+ifeq ($(ENABLE_AIS_RX),1)
+    ENABLE_APRS := 0
+    ENABLE_AMATEUR_BAND_ONLY := 0
+    ENABLE_AM_FIX := 0
+    ENABLE_FEAT_F4HWN_SLEEP := 0
+endif
 # Fill-in digipeater. OFF for shipped images on purpose: this radio transmits
 # FFSK 1200/1800, not Bell 202, so repeats are decodable by software modems but
 # not by hardware TNCs — fine for a closed group, not for public infrastructure.
@@ -216,6 +224,9 @@ ifeq ($(ENABLE_UART),1)
 endif
 ifeq ($(ENABLE_AM_FIX), 1)
 	OBJS += am_fix.o
+endif
+ifeq ($(ENABLE_AIS_RX),1)
+	OBJS += app/ais_probe.o app/ais_bits.o
 endif
 ifeq ($(ENABLE_APRS),1)
 	OBJS += app/aprs_minimal.o
@@ -500,6 +511,9 @@ ifeq ($(ENABLE_FLASHLIGHT),1)
 endif
 ifeq ($(ENABLE_UART_RW_BK_REGS),1)
 	CFLAGS  += -DENABLE_UART_RW_BK_REGS
+endif
+ifeq ($(ENABLE_AIS_RX),1)
+	CFLAGS  += -DENABLE_AIS_RX
 endif
 ifeq ($(ENABLE_UART_RC),1)
 	CFLAGS  += -DENABLE_UART_RC
