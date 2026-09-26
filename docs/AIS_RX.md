@@ -1,254 +1,194 @@
-# AIS RX — Dr. Heinz Doofenshmirtz (channel B, 162.025 MHz)
+# AIS RX experimental branch — technical status
 
-**Status: on-radio RF pulse diagnostic and optional bench probe only. NO
-working AIS GMSK receiver yet. NO verified AIS messages or real AIS bits
-claimed.** This branch is intentionally
-independent of the production APRS image on `main`.
+**Maintainer credit for experimental AIS work: Dr. Heinz Doofenshmirtz.**
+See [AUTHORS.md](../AUTHORS.md) for *all previously named upstream
+contributors* and [LICENSE](../LICENSE) for the unchanged legal notices.
 
-## Build and expected first result
+**26 September 2026: This is not an on-device AIS receiver.** The
+experimental firmware can set the BK4819 to AIS channel B
+(162.025 MHz) and prevent intentional transmission, but **does not
+receive or validate live AIS GMSK symbols**. The old RSSI/pulse
+counter was deleted; random noise spikes and unrelated VHF signals
+could masquerade as a supposed AIS detection. No on-air performance,
+MMSI or position on the radio has been demonstrated.
 
-Author byline for these **experimental AIS additions**: **Dr. Heinz
-Doofenshmirtz** (`DR.H.DOOF` in the limited UV-K5 screen). All known prior
-authors and the unchanged licensing are recorded in
-[`AUTHORS.md`](../AUTHORS.md) and [`LICENSE`](../LICENSE).
+For the investigation of the **required internal connection**,
+read [ON_DEVICE_FEASIBILITY.md](ON_DEVICE_FEASIBILITY.md). It
+distinguishes the already documented BK4819 audio output, the
+documented narrow-FSK modem and the actual wired MCU ADC inputs.
 
-This **AIS branch builds AIS RX by default** (`ENABLE_AIS_RX?=1`).
-The explicit switch below documents the intended binary and prevents
-accidentally building the legacy APRS edition:
+## Software components that have independent tests
+
+- `app/ais_probe.[ch]` fixes the radio to **162.025 MHz**, FM, wide
+  filter, disables the RX HPF/LPF/deemphasis and attempts one of
+  two experimental AF output routes. The chip's narrow FSK
+  modem is left disabled.
+- `app/ais_bits.[ch]` is a standalone **post-GMSK symbol**
+  processor. It accepts one already-demodulated NRZI **symbol**
+  at a time via `AIS_BitsPushNRZI()`. It checks HDLC
+  flags, bit-stuffing and CRC-16/X-25 before returning
+  AIS message type, length and MMSI. It currently has
+  **no live symbol input** on the handheld.
+- `utils/ais_bits_test.c` independently synthesizes HDLC
+  frames including stuffing/FCS to test good and deliberately
+  corrupted type-1 AIS frames, MMSI and NRZI inversion.
+- `utils/ais_af_decode.[ch]` and `utils/ais_af_wav.c`
+  are **PC-only** 48-/96-ksample/s, mono PCM16
+  instantaneous-FM/audio decoders, not code currently
+  executable with the actual radio's AF: a 20-Hz
+  DC tracker, Gaussian BT=0.4 smoothing, 16 symbol
+  phase hypotheses and the same frame checker.
+- `utils/ais_af_test.c` independently synthesizes
+  Gaussian-shaped NRZI AIS audio, tests both sample rates,
+  sign reversal, FCS corruption, noise-only input and
+  end-to-end WAV round trips. These are **off-air,
+  synthetic tests**, not BK4819 hardware validations.
+
+## Rejected RSSI pulse approach
+
+Previous experimental builds contained `app/ais_diag*`
+and an on-radio `RF PULSES` display. It sampled BK4819
+RSSI every approximately 10 ms, declared 20–120-ms RSSI
+peaks as possible AIS bursts and displayed a cumulative
+counter. This **could not separate noise transients,
+short co-channel/adjacent-channel traffic or actual AIS**.
+Even a pulse of exactly one AIS-slot duration is not
+evidence of GMSK data or a correct HDLC CRC. Both
+the embedded diagnostic and its host test were removed
+from the build and source tree.
+
+The current UV-K5 lab LCD is deliberately explicit:
+
+```text
+AIS RX - LAB ONLY
+     162.025
+RX ONLY / NO TX
+GMSK: UNVERIFIED
+AIS DECODE: OFF
+NO PACKET CLAIMS
+```
+
+No fake RF-to-AIS counter is present. The old
+APRS main branch remains independent.
+
+## RF / BK4819 bench configuration
+
+The chip is tuned using its 10-Hz frequency units:
+
+```c
+#define AIS_RX_FREQUENCY_10HZ 16202500u
+```
+
+The settings in `AIS_RX_Configure()` are **experiments,
+not proof of an on-device 9.6-kbaud data path**.
+
+| Branch build flag | BK4819 AF route | What it tries |
+|---|---|---|
+| `AIS_AF_ROUTE=9` | `REG_47[11:8]=9`, RX gain bypass | Digital-radio RX audio bypass |
+| `AIS_AF_ROUTE=1` | `REG_47[11:8]=1` | FM audio with software RX audio filters disabled |
+
+Both use the wide (nominal 25-kHz) channel filter and
+`REG_2B[10:8]=111` to bypass the documented audio HPF,
+LPF and deemphasis. The receiver bypass is routed toward
+**analogue AF audio** and does not by itself constitute
+an ADC or digital bit source in the DP32G030.
+
+The BK4819 hardware FSK receiver in the bundled
+[Application Note v1.0](bk4819/BK4819%20Application%20Note%20v1.0.pdf)
+describes lower-rate FSK/FFSK RX settings, **not a
+documented 9,600-symbol/s AIS GMSK RX mode**.
+Its 16-bit `REG_72` tone/clock formula with the stated
+26-MHz reference would require ~99,115 for a naive
+9,600-bit/s configuration (outside 0–65,535).
+That calculation argues against simply multiplying
+an APRS constant; it does **not** disprove every
+possible undocumented alternative clock/mode.
+
+When UART support is compiled, `AIS_RX_LogStatus()`
+reads BK4819 registers after RX setup; that is a
+configuration audit, **not reception evidence**:
+
+```text
+AISRX 162.025 AF9 38=.... 39=.... 43=.... 2B=.... 47=.... 58=....
+```
+
+## Known UV-K5 board limitation
+
+The current `BOARD_ADC_Init()` configuration in
+[`board.c`](../board.c) uses SAR ADC **CH4 for
+battery voltage** and **CH9 for battery current**.
+No documented installed wiring is shown here from the
+BK4819's analogue FM-discriminator output into
+a microcontroller ADC at 48/96 ksample/s; similarly,
+the existing 1.2/2.4k FSK FIFO is not a proven source
+of 9.6-kbaud GMSK bits.
+
+Rob Riggs / Mobilinkd demonstrated reception of
+**9.600-baud GMSK on a modified UV-K6 using an
+external TNC4 modem**, with PCB audio-coupling
+modifications and appropriate firmware filtering:
+[UV-K6 Digital Modulation Modification](https://github.com/mobilinkd/uv-k6-digital-mod/blob/master/UV-K6.ipynb).
+This is a helpful practical external demonstration of
+the RF/audio path, **not** proof that an unmodified
+UV-K5 CPU can decode the same samples autonomously.
+No Mobilinkd code or hardware instructions are
+copied into this firmware.
+
+## Build and CI
 
 ```sh
 git clone --branch ais-rx https://github.com/DE8MSH/uv-k5-firmware-ta1js.git
 cd uv-k5-firmware-ta1js
 make clean
-make -j4 ENABLE_AIS_RX=1
+make -j4 ENABLE_AIS_RX=1 AIS_AF_ROUTE=9
 arm-none-eabi-size f4hwn
-wc -c f4hwn.bin
-cc -std=c11 -Wall -Wextra -Werror -Iapp \
-   app/ais_bits.c utils/ais_bits_test.c -o /tmp/ais_bits_test
-/tmp/ais_bits_test
+# Optional AF-route comparison
+make clean
+make -j4 ENABLE_AIS_RX=1 AIS_AF_ROUTE=1
 ```
 
-Use `arm-none-eabi-gcc` **10.3.1**, matching the separate
-[experimental GitHub Actions workflow](../.github/workflows/ais-rx.yml).
-The raw `f4hwn.bin` must fit within **61,440 bytes**. Alternatively, run
-`./compile-with-docker.sh aisrx` to get
-`compiled-firmware/ais-rx-162025-rx-only.bin`; the new `aisrx` case
-avoids the legacy script's global Docker prune. The CI workflow publishes
-short-lived `AIS-RX-AF9-AF1-EXPERIMENTAL` artifacts with TWO RX-only
-binaries, not an APRS release.
+Use `arm-none-eabi-gcc` 10.3.1. Both images must fit
+in 61,440 bytes. The dedicated
+[experimental GitHub Actions workflow](https://github.com/DE8MSH/uv-k5-firmware-ta1js/actions/workflows/ais-rx.yml)
+runs synthetic post-demodulator and off-air
+audio tests, then builds both variants as artifacts.
+The output is an **engineering lab firmware**, not
+a validated AIS receiver. Flashing the lab-only
+firmware is **not needed** to establish this limitation.
+Keep an EEPROM backup and independently verify
+the PTT TX block if you do flash it.
 
-**On the first boot:** the welcome display should show
-`DR.H.DOOF v0.1` and `AIS-RX Edition`; the BK4819 should be configured
-to receive at 162.025 MHz and present an *experimental* AF bypass at
-the analogue audio output. The signal may be absent or unsuitable until
-hardware measurements establish the actual bandwidth. **No AIS vessel,
-MMSI, position, CRC pass or live GMSK symbols are displayed or received
-by the embedded checker yet.** The only present AIS bit results are the
-synthetic host test. PTT must be verified to remain disabled before use.
+## Acceptance test for the NEXT genuine milestone
 
-`ENABLE_AIS_RX=1` turns APRS and AM compensation off, enables all-band
-**reception** and disables the sleep feature. PTT and entry into transmit mode
-are blocked in `RADIO_PrepareTX`, `FUNCTION_Select` and `FUNCTION_Transmit`.
-The normal `f4hwn.bin` is produced. Check that it remains under **61,440
-bytes** before considering a flash. Back up the radio's EEPROM first.
+The next firmware release should not display an AIS
+message, AIS packet count, MMSI or ship position
+until **all** these requirements are actually met:
 
-## Stage 0: completely on-radio RSSI / RF pulse test — no audio cable
+1. Demonstrate a physical **installed** receive-data
+   route from the BK4819 into the DP32G030, or
+   a documented / independently proven alternative
+   integrated GMSK source. A speaker-jack waveform
+   outside the radio alone does not meet this condition.
+2. Receive a controlled, known, RF-modulated
+   **9,600-symbol/s GMSK AIS burst** with the
+   handheld receiving on 162.025 MHz. Clock
+   recovery and a hard-decision symbol stream
+   must run on the radio.
+3. Feed those symbols into the already tested
+   `AIS_BitsPushNRZI()` engine. A real on-device
+   **valid HDLC frame with matching CRC and
+   the known test MMSI** is the first success.
+4. Repeatedly reject corrupt payloads and
+   interference without generating fake
+   vessel identifiers. Only then implement
+   position decoding and a ship display.
 
-This is now the **primary field test** for anyone without an audio cable
-or external sound interface. Flash the AIS-RX experimental image once
-using the normal UV-K5 firmware flashing method; all subsequent
-monitoring is displayed directly on the radio.
+If no verified stock-board internal path exists,
+the options become *internal hardware modification*
+or a radio with a native digital receive-data interface.
+An unsupported RSSI-pulse heuristic must not
+be substituted for the missing GMSK data path.
 
-The AIS branch now overrides the normal VFO main screen with:
-
-```text
-AIS RX / RF TEST
-       162.025
-RX ONLY  |  NO TX
-RSSI -110 dBm
-RF PULSES: 0
-NO AIS DECODE YET
-```
-
-These display fields represent a **coarse RSSI envelope test**, not
-digital AIS reception. `app/ais_diag_core.[ch]` checks BK4819 RSSI
-every ~10 ms, tracks the noise floor, and counts isolated RF peaks
-roughly 20–120 ms wide and at least 12 dB above the floor.
-It bridges one sample's brief signal dip, rejects one-tick spikes,
-and rejects long continuous carriers. The screen refreshes about
-five times per second. `utils/ais_diag_test.c` is a deterministic
-host test of the pulse-counting algorithm.
-
-* A positive RF pulse count **cannot** validate AIS, GMSK, NRZI,
-  HDLC, an MMSI, or a particular ship. A nearby interferer could
-  produce exactly the same counter increase.
-* A zero count does **not** prove there are no AIS signals:
-  weak, overlapping, adjacent-channel, or poorly timed bursts may
-  be missed at this slow sampling rate.
-* This diagnostic does not require or collect audio samples, use
-  an ADC, or claim to have found a GMSK symbol stream.
-* The BK4819's documented FSK RX modes remain limited to
-  1.2/2.4-kbps formats. The DP32G030 SAR ADC channels used by this
-  board (`BOARD_ADC_Init`) currently measure battery voltage and
-  battery current, not discriminator audio. Thus, **a usable
-  physical on-device 9.6-kbaud GMSK signal path has not been
-  established**. Without one we cannot turn the existing
-  `app/ais_bits.c` checker into live AIS decoding by software
-  alone.
-
-This is an explicitly limited but independently testable on-device
-milestone. The earlier optional AF9/AF1 plus PC WAV experiment is
-retained for developers; it is **not required** to use the new
-on-radio RSSI display.
-
-## Stage 1, already implemented
-
-- On startup set active RX VFO to **162.025 MHz** (AIS channel B), FM, wide
-  25 kHz filter and monitor mode (no squelch wait on the short AIS bursts).
-- Every time `RADIO_SetupRegisters` reruns, force the BK4819 frequency back
-  to 162.025 MHz and apply `AIS_RX_Configure()`. User channel changes cannot
-  retune the hardware in this experimental build; the rest of the user
-  interface is not yet locked to the probe channel.
-- `BK4819_SetFilterBandwidth(WIDE, true)` prevents narrow-on-weak-signal
-  filtering. `REG_2B[10:8]=111` bypasses the RX 300 Hz HPF, 3 kHz LPF and
-  deemphasis. `REG_47[11:8]=9` selects Beken's documented *digital-radio RX
-  bypass* AF route to the normal analogue audio output. Two compile-time
-  routes are now available: AF9 digital bypass (default) and AF1 ordinary FM
-  AF, each with all three software RX filters disabled. The actual analogue
-  output bandwidth of both routes has NOT been measured.
-- The chip's FSK modem is **disabled**. It cannot be treated as a 9600-bit/s
-  GMSK demodulator based on the available documentation.
-
-## Stage 1b, synthetic AIS bit checks
-
-`app/ais_bits.[ch]` is a small, hardware-independent **post-demodulation**
-checker. Its only input is a *hard-decision NRZI symbol* stream via
-`AIS_BitsPushNRZI()`; it has no RF, FM-discriminator or symbol timing input
-connected today. It recognizes HDLC flags, reverses NRZI, removes stuffed
-zeroes, checks CRC-16/X-25 and extracts the six-bit message type and
-30-bit MMSI. Buffers cover ordinary type-1 position reports and
-type-5 static/voyage reports, not every possible AIS message length.
-
-`utils/ais_bits_test.c` synthesizes a type-1 message (MMSI 123456789),
-transmits the entire fake frame in NRZI with real HDLC bit stuffing and FCS,
-then tests rejection after corrupting one bit, inverted NRZI level and the
-published X-25 test vector (`123456789 -> 0x906E`). This is a **host unit
-test**, *not* evidence that the BK4819 receives real AIS bits.
-
-## Hardware facts from the supplied Beken PDFs
-
-- *BK4819 Application Note v1.0*, **FSK**, printed pp. 12-14:
-  `REG_58` documents 1200 and 2400 bps FSK/FFSK RX modes and their
-  bandwidth settings; no 9600-bps GMSK RX setting is documented.
-  `REG_72` is a **16-bit** tone/FSK clock word at about
-  `frequency_hz * 10.32444` for the 26 MHz crystal. A naive 9600-bps
-  setting would require ~99,115, larger than 65,535, so simply editing
-  the existing APRS 1200-bps clock constant will not work.
-- Same application note, **Tx/Rx Audio** printed pp. 4-5:
-  `REG_2B[10:8]` can bypass all three RX audio filters.
-  **Digital Walkie-Talkie**, printed p. 33: `REG_47[11:8]=9` is the
-  documented RX audio bypass path (shown in the `RF_EnterBypass()` example).
-- *BK4819(V3) Application Note 20210428*, FSK pp. 8-10 and Tx/Rx Audio
-  pp. 3-5, describes the same core limits and also AF selector
-  `REG_47[11:8]=8` as "FSK Out for Rx Test". That is the internal
-  narrow-FSK modem's test output; it is **not** documented as raw GMSK.
-
-## Stage 2: AF route comparison, register readback, and PC C decoder
-
-Two firmware builds are now available for hardware comparisons. Both keep TX
-blocked: AIS_AF_ROUTE=9 (default) selects Beken's digital-radio RX bypass,
-REG_47[11:8]=9, with the Application Note's RX gain bit REG_47[1]=1;
-AIS_AF_ROUTE=1 selects ordinary FM audio with software filters disabled.
-We do not yet know whether either route preserves the necessary 9.6-kbaud
-information through the physical headphone jack.
-
-After startup the firmware emits one UART register readback line, e.g.:
-
-    AISRX 162.025 AF9 38=.... 39=.... 43=.... 2B=.... 47=.... 58=....
-
-38/39 are the tuning words; 43 is RX bandwidth; 2B is the audio filters;
-47 is the AF path; 58 should show the old 1.2/2.4k hardware FSK modem
-DISABLED. Register values check our programming, not real RF reception.
-
-A new independent *host-side* C decoder now processes mono 16-bit PCM
-FM-discriminator audio at either 48 or 96 ksample/s. It uses a slow
-20-Hz DC tracker, a BT=0.4 Gaussian matched filter, 16 simultaneous
-symbol phases, sign slicing and the existing AIS NRZI/HDLC/CRC checker.
-It emits CRC-valid AIS message type and MMSI, NOT yet latitude/longitude.
-This code does not accept complex I/Q, nor run on the handheld MCU.
-
-Build the PC WAV decoder:
-
-    cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
-      app/ais_bits.c utils/ais_af_decode.c utils/ais_af_wav.c \
-      -lm -o /tmp/ais_af_wav
-    /tmp/ais_af_wav captured-af9-mono-96k.wav
-
-Run reproducible tests without RF hardware:
-
-    cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
-      app/ais_bits.c utils/ais_af_decode.c utils/ais_af_test.c \
-      -lm -o /tmp/ais_af_test
-    /tmp/ais_af_test
-    /tmp/ais_af_test --wav /tmp/ais-synthetic.wav
-    /tmp/ais_af_wav /tmp/ais-synthetic.wav
-    /tmp/ais_af_test --noise /tmp/ais-noise.wav
-    /tmp/ais_af_wav /tmp/ais-noise.wav
-
-Synthetic checks span 48k/96k, frequency-pulse shaping at BT=0.4,
-NRZI polarity inversion, deliberately corrupted FCS, noise-only
-input and the WAV command-line reader. They do **not** validate the
-BK4819's AF path or establish real on-air decode.
-
-For the hardware experiment, record 10 seconds of AF9 at 96 ksample/s
-mono PCM16 via a safely attenuated AC-coupled audio-interface input.
-Repeat with AF1, keeping antenna and RF conditions comparable. Collect
-the startup register readbacks, audio RMS and peak, and PC CRC-valid
-packet counts. If either route produces real CRC-verified packets,
-only then investigate a practical input path into the DP32G030 MCU.
-
-## Why the host decoder is not yet installed on the radio
-
-The existing firmware configures the DP32G030 SAR ADC for **channel 4
-(battery voltage)** and **channel 9 (battery current)** in
-[board.c](../board.c), not for an AF signal from the BK4819. Merely
-routing the BK4819 AF to the speaker does **not** establish an electrical
-connection to an MCU ADC input or a 48/96-ksample/s DMA acquisition
-path. We should not repurpose either battery-monitor channel, assert
-that the BK4819's 1.2/2.4-kbps FSK FIFO contains AIS, or attempt UART
-audio streaming without verifying the hardware and throughput.
-
-A **verified physical audio sample path or digital 9.6-kbaud symbol
-path** is the prerequisite for an on-device GMSK decoder. The real
-AF9/AF1 WAV experiment isolates that question first; if neither
-recording preserves 9.6-kbaud information, firmware-only message
-decoding cannot fix the lost signal.
-
-## Bench checklist / next decision
-
-1. Flash **only an intentionally built `ENABLE_AIS_RX=1` image**, after an
-   EEPROM backup; verify the radio never enters TX when PTT is pressed.
-2. Use an SDR or RF signal generator to check actual tuning at 162.025 MHz;
-   record the headphone/AF bypass path at at least 48 ksample/s while
-   providing a controlled **received** AIS burst. Confirm the 9.6-kbaud
-   frequency information is still present; measure, don't assume.
-3. Decode the AF9 and AF1 WAVs with the PC program and compare their CRC
-   results. Only if a real recording yields repeatable valid AIS should we
-   investigate a path for binary symbols into the DP32G030 MCU.
-4. Wire a verified NRZI-symbol source to `AIS_BitsPushNRZI()`; then use
-   its CRC-valid frame callback before adding position parsing or display.
-
-## Current C decoder candidate (not copied or vendored)
-
-**[ibelinp/libaisdemod](https://github.com/ibelinp/libaisdemod)**:
-2026 C99, MIT license, no library dependencies, synthetic tests. Its
-input is **complex baseband I/Q** at high sample rates (96 kHz or more)
-and its output is CRC-validated AIS/AIVDM including position and MMSI.
-That makes it a practical **PC/SDR reference**, but **not a drop-in decoder**
-for the BK4819's analogue AF route or the UV-K5 MCU. The useful downstream
-parts to study are `src/frame.c` and `src/message.c`; do not integrate
-its I/Q front end into this tiny firmware without a feasibility review.
-
-As a GPL alternative, **[hessu/gnuais](https://github.com/hessu/gnuais)**
-is C and was updated in February 2026, but introduces GPL-2.0 licensing
-considerations and is targeted at host sound-card/SDR processing.
+---
+Earlier APRS details: [APRS.md](APRS.md).
+Author attribution: [../AUTHORS.md](../AUTHORS.md).
