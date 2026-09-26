@@ -231,7 +231,6 @@ ifeq ($(ENABLE_AM_FIX), 1)
 endif
 ifeq ($(ENABLE_AIS_RX),1)
 	OBJS += app/ais_probe.o app/ais_bits.o
-	OBJS += app/ais_diag.o app/ais_diag_core.o
 endif
 ifeq ($(ENABLE_APRS),1)
 	OBJS += app/aprs_minimal.o
