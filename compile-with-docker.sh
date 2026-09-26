@@ -15,6 +15,18 @@ case "$BASE" in
     ;;
 esac
 
+# AIS-RX lab build uses an isolated image and NEVER runs the older global
+# `docker system prune` / image-removal path used by the legacy editions.
+if [ "${1:-}" = "aisrx" ]; then
+    mkdir -p "$FIRMWARE_DIR"
+    echo "Building the experimental AIS-RX image (Dr. Heinz Doofenshmirtz)..."
+    docker build --pull --build-arg "ALPINE_TAG=${ALPINE_TAG}" -t "${IMAGE_NAME}-aisrx" . || exit 1
+    docker run --rm -v "$FIRMWARE_DIR:/app/compiled-firmware" "${IMAGE_NAME}-aisrx" \
+        /bin/bash -c 'set -eu; cd /app; make clean; make -j2 ENABLE_AIS_RX=1; size=$(stat -c%s f4hwn.bin); echo "AIS RX raw firmware: $size / 61440 bytes"; test "$size" -le 61440; cp f4hwn.bin compiled-firmware/ais-rx-162025-rx-only.bin' || exit 1
+    echo "Ready: compiled-firmware/ais-rx-162025-rx-only.bin (EXPERIMENTAL; NO AIS DECODE)"
+    exit 0
+fi
+
 # Create firmware output directory if it doesn't exist
 mkdir -p "$FIRMWARE_DIR"
 
@@ -51,7 +63,7 @@ clean() {
 custom() {
     echo "🔧 Compiling Custom..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
-        rm -f ./compiled-firmware/* && cd /app && make -s \
+        rm -f ./compiled-firmware/* && cd /app && make -s ENABLE_AIS_RX=0 \
         EDITION_STRING=Custom \
         TARGET=f4hwn.custom \
         && cp f4hwn.custom* compiled-firmware/"
@@ -60,7 +72,7 @@ custom() {
 standard() {
     echo "📦 Compiling Standard..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
-        rm -f ./compiled-firmware/* && cd /app && make -s \
+        rm -f ./compiled-firmware/* && cd /app && make -s ENABLE_AIS_RX=0 \
         ENABLE_SPECTRUM=0 \
         ENABLE_FMRADIO=0 \
         ENABLE_AIRCOPY=0 \
@@ -73,7 +85,7 @@ standard() {
 bandscope() {
     echo "📺 Compiling Bandscope..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
-        rm -f ./compiled-firmware/* && cd /app && make -s \
+        rm -f ./compiled-firmware/* && cd /app && make -s ENABLE_AIS_RX=0 \
         ENABLE_SPECTRUM=1 \
         ENABLE_FMRADIO=0 \
         ENABLE_VOX=0 \
@@ -92,7 +104,7 @@ bandscope() {
 broadcast() {
     echo "📻 Compiling Broadcast..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
-        cd /app && make -s \
+        cd /app && make -s ENABLE_AIS_RX=0 \
         ENABLE_SPECTRUM=0 \
         ENABLE_FMRADIO=1 \
         ENABLE_VOX=1 \
@@ -111,7 +123,7 @@ broadcast() {
 basic() {
     echo "☘️ Compiling Basic..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
-        cd /app && make -s \
+        cd /app && make -s ENABLE_AIS_RX=0 \
         ENABLE_SPECTRUM=1 \
         ENABLE_FMRADIO=1 \
         ENABLE_VOX=0 \
@@ -136,7 +148,7 @@ basic() {
 rescueops() {
     echo "🚨 Compiling RescueOps..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
-        cd /app && make -s \
+        cd /app && make -s ENABLE_AIS_RX=0 \
         ENABLE_SPECTRUM=0 \
         ENABLE_FMRADIO=0 \
         ENABLE_VOX=1 \
@@ -155,7 +167,7 @@ rescueops() {
 game() {
     echo "🎮 Compiling Game..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
-        cd /app && make -s \
+        cd /app && make -s ENABLE_AIS_RX=0 \
         ENABLE_SPECTRUM=0 \
         ENABLE_FMRADIO=1 \
         ENABLE_VOX=0 \
@@ -181,6 +193,7 @@ case "$1" in
     basic) basic ;;
     rescueops) rescueops ;;
     game) game ;;
+    aisrx) echo 'AIS RX is handled before the legacy Docker cleanup'; exit 0 ;;
     all)
         bandscope
         broadcast
@@ -189,7 +202,7 @@ case "$1" in
         game
         ;;
     *)
-        echo "Usage: BASE=alpine:<tag> $0 {clean|custom|standard|bandscope|broadcast|basic|rescueops|game|all}"
+        echo "Usage: BASE=alpine:<tag> $0 {aisrx|clean|custom|standard|bandscope|broadcast|basic|rescueops|game|all}"
         echo "Examples: BASE=alpine:3.22 … | BASE=alpine:3.21 … | BASE=alpine:3.19 … | BASE=alpine:edge …"
         exit 1
         ;;
