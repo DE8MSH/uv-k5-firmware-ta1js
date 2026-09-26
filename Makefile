@@ -42,8 +42,9 @@ ENABLE_BYP_RAW_DEMODULATORS     ?= 0
 ENABLE_BLMIN_TMP_OFF            ?= 0
 ENABLE_SCAN_RANGES              ?= 1
 ENABLE_APRS                     ?= 1
-# Experimental receive-only AIS channel B probe; overrides APRS and TX bands.
-ENABLE_AIS_RX                   ?= 0
+# AIS branch defaults to receive-only 162.025 MHz. Use ENABLE_AIS_RX=0
+# explicitly for a legacy/APRS build; the PTT is disabled for AIS builds.
+ENABLE_AIS_RX                   ?= 1
 ifeq ($(ENABLE_AIS_RX),1)
     ENABLE_APRS := 0
     ENABLE_AMATEUR_BAND_ONLY := 0
@@ -305,6 +306,15 @@ ifeq ($(ENABLE_FEAT_F4HWN),1)
 	VERSION_STRING_2 ?= v1.3
 
 	EDITION_STRING ?= APRS
+
+	# AIS lab branch: keep the complete upstream credits in AUTHORS.md.
+	# The small UV-K5 display needs an abbreviated byline; use the full
+	# requested author name in README, AUTHORS.md and UART identification.
+	ifeq ($(ENABLE_AIS_RX),1)
+		AUTHOR_STRING_2 := DR.H.DOOF
+		VERSION_STRING_2 := v0.1
+		EDITION_STRING := AIS-RX
+	endif
 
 	# Edition branding = the edition maintainer only. The full lineage
 	# (Dual Tachyon → OneOfEleven/fagci → egzumer → F4HWN) is credited where
