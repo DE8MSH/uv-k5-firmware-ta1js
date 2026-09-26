@@ -33,8 +33,8 @@ The raw `f4hwn.bin` must fit within **61,440 bytes**. Alternatively, run
 `./compile-with-docker.sh aisrx` to get
 `compiled-firmware/ais-rx-162025-rx-only.bin`; the new `aisrx` case
 avoids the legacy script's global Docker prune. The CI workflow publishes
-a short-lived artifact named `AIS-RX-EXPERIMENTAL-NOT-DECODED`, not an
-APRS release.
+short-lived `AIS-RX-AF9-AF1-EXPERIMENTAL` artifacts with TWO RX-only
+binaries, not an APRS release.
 
 **On the first boot:** the welcome display should show
 `DR.H.DOOF v0.1` and `AIS-RX Edition`; the BK4819 should be configured
@@ -62,8 +62,10 @@ bytes** before considering a flash. Back up the radio's EEPROM first.
 - `BK4819_SetFilterBandwidth(WIDE, true)` prevents narrow-on-weak-signal
   filtering. `REG_2B[10:8]=111` bypasses the RX 300 Hz HPF, 3 kHz LPF and
   deemphasis. `REG_47[11:8]=9` selects Beken's documented *digital-radio RX
-  bypass* AF route to the normal analogue audio output. The quality and
-  electrical accessibility of that signal have **not** been measured.
+  bypass* AF route to the normal analogue audio output. Two compile-time
+  routes are now available: AF9 digital bypass (default) and AF1 ordinary FM
+  AF, each with all three software RX filters disabled. The actual analogue
+  output bandwidth of both routes has NOT been measured.
 - The chip's FSK modem is **disabled**. It cannot be treated as a 9600-bit/s
   GMSK demodulator based on the available documentation.
 
@@ -101,6 +103,60 @@ test**, *not* evidence that the BK4819 receives real AIS bits.
   `REG_47[11:8]=8` as "FSK Out for Rx Test". That is the internal
   narrow-FSK modem's test output; it is **not** documented as raw GMSK.
 
+## Stage 2: AF route comparison, register readback, and PC C decoder
+
+Two firmware builds are now available for hardware comparisons. Both keep TX
+blocked: AIS_AF_ROUTE=9 (default) selects Beken's digital-radio RX bypass,
+REG_47[11:8]=9, with the Application Note's RX gain bit REG_47[1]=1;
+AIS_AF_ROUTE=1 selects ordinary FM audio with software filters disabled.
+We do not yet know whether either route preserves the necessary 9.6-kbaud
+information through the physical headphone jack.
+
+After startup the firmware emits one UART register readback line, e.g.:
+
+    AISRX 162.025 AF9 38=.... 39=.... 43=.... 2B=.... 47=.... 58=....
+
+38/39 are the tuning words; 43 is RX bandwidth; 2B is the audio filters;
+47 is the AF path; 58 should show the old 1.2/2.4k hardware FSK modem
+DISABLED. Register values check our programming, not real RF reception.
+
+A new independent *host-side* C decoder now processes mono 16-bit PCM
+FM-discriminator audio at either 48 or 96 ksample/s. It uses a slow
+20-Hz DC tracker, a BT=0.4 Gaussian matched filter, 16 simultaneous
+symbol phases, sign slicing and the existing AIS NRZI/HDLC/CRC checker.
+It emits CRC-valid AIS message type and MMSI, NOT yet latitude/longitude.
+This code does not accept complex I/Q, nor run on the handheld MCU.
+
+Build the PC WAV decoder:
+
+    cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
+      app/ais_bits.c utils/ais_af_decode.c utils/ais_af_wav.c \
+      -lm -o /tmp/ais_af_wav
+    /tmp/ais_af_wav captured-af9-mono-96k.wav
+
+Run reproducible tests without RF hardware:
+
+    cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
+      app/ais_bits.c utils/ais_af_decode.c utils/ais_af_test.c \
+      -lm -o /tmp/ais_af_test
+    /tmp/ais_af_test
+    /tmp/ais_af_test --wav /tmp/ais-synthetic.wav
+    /tmp/ais_af_wav /tmp/ais-synthetic.wav
+    /tmp/ais_af_test --noise /tmp/ais-noise.wav
+    /tmp/ais_af_wav /tmp/ais-noise.wav
+
+Synthetic checks span 48k/96k, frequency-pulse shaping at BT=0.4,
+NRZI polarity inversion, deliberately corrupted FCS, noise-only
+input and the WAV command-line reader. They do **not** validate the
+BK4819's AF path or establish real on-air decode.
+
+For the hardware experiment, record 10 seconds of AF9 at 96 ksample/s
+mono PCM16 via a safely attenuated AC-coupled audio-interface input.
+Repeat with AF1, keeping antenna and RF conditions comparable. Collect
+the startup register readbacks, audio RMS and peak, and PC CRC-valid
+packet counts. If either route produces real CRC-verified packets,
+only then investigate a practical input path into the DP32G030 MCU.
+
 ## Bench checklist / next decision
 
 1. Flash **only an intentionally built `ENABLE_AIS_RX=1` image**, after an
@@ -109,9 +165,9 @@ test**, *not* evidence that the BK4819 receives real AIS bits.
    record the headphone/AF bypass path at at least 48 ksample/s while
    providing a controlled **received** AIS burst. Confirm the 9.6-kbaud
    frequency information is still present; measure, don't assume.
-3. If the AF signal is usable, first demodulate and validate it on a PC. Only
-   then look for a way to bring the needed samples or binary symbols to the
-   DP32G030 MCU without losing bits on a ~26 ms burst.
+3. Decode the AF9 and AF1 WAVs with the PC program and compare their CRC
+   results. Only if a real recording yields repeatable valid AIS should we
+   investigate a path for binary symbols into the DP32G030 MCU.
 4. Wire a verified NRZI-symbol source to `AIS_BitsPushNRZI()`; then use
    its CRC-valid frame callback before adding position parsing or display.
 
