@@ -14,7 +14,7 @@
 
 #ifdef ENABLE_AIS_RX
     // Full requested AIS-branch credit is too long for the small welcome screen.
-    const char UART_Version[] = "UV-K5 AIS-RX v0.1 by Dr. Heinz Doofenshmirtz\r\n";
+    const char UART_Version[] = "UV-K5 AIS-RX v0.2 LAB (NOT DECODING) by Dr. Heinz Doofenshmirtz\r\n";
 #else
     const char UART_Version[] = "UV-K5 Firmware, " AUTHOR_STRING VER "\r\n";
 #endif
