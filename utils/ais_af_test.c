@@ -156,8 +156,65 @@ static void run_one(unsigned int rate, int bad_fcs, int invert, int quiet)
     free(pcm);
 }
 
-int main(void)
+/* Generate a real PCM16 WAVE fixture for the command-line reader. The
+ * contents are independently synthesized Gaussian frequency pulses, not an
+ * RF recording or samples taken from a BK4819. */
+static void put_le16(FILE *f, unsigned int v)
 {
+    fputc((int)(v & 255u), f);
+    fputc((int)((v >> 8u) & 255u), f);
+}
+
+static void put_le32(FILE *f, uint32_t v)
+{
+    put_le16(f, v & 0xffffu);
+    put_le16(f, v >> 16u);
+}
+
+static void generate_wav(const char *name, int quiet)
+{
+    const unsigned int rate = 96000u;
+    const size_t nsamples = (size_t)rate * TEST_MS / 1000u;
+    const uint32_t size = (uint32_t)(nsamples * 2u);
+    int16_t *pcm = (int16_t *)malloc(nsamples * sizeof(*pcm));
+    assert(pcm);
+    synth_pcm(pcm, nsamples, rate, 0, 0, 3u, quiet);
+    FILE *f = fopen(name, "wb");
+    assert(f);
+    assert(fwrite("RIFF", 1, 4, f) == 4u);
+    put_le32(f, 36u + size);
+    assert(fwrite("WAVEfmt ", 1, 8, f) == 8u);
+    put_le32(f, 16u);
+    put_le16(f, 1u);  /* PCM */
+    put_le16(f, 1u);  /* mono */
+    put_le32(f, rate);
+    put_le32(f, rate * 2u);
+    put_le16(f, 2u);
+    put_le16(f, 16u);
+    assert(fwrite("data", 1, 4, f) == 4u);
+    put_le32(f, size);
+    for (size_t i = 0; i < nsamples; ++i)
+        put_le16(f, (uint16_t)pcm[i]);
+    assert(fclose(f) == 0);
+    free(pcm);
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 3 && strcmp(argv[1], "--wav") == 0) {
+        generate_wav(argv[2], 0);
+        printf("Synthetic AIS-AF fixture written: %s\n", argv[2]);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[1], "--noise") == 0) {
+        generate_wav(argv[2], 1);
+        printf("Synthetic noise-only fixture written: %s\n", argv[2]);
+        return 0;
+    }
+    if (argc != 1) {
+        fprintf(stderr, "usage: %s [--wav|--noise FILE.wav]\n", argv[0]);
+        return 2;
+    }
     run_one(48000u, 0, 0, 0);
     run_one(96000u, 0, 0, 0);
     run_one(48000u, 0, 1, 0);
