@@ -47,6 +47,7 @@
 #endif
 #ifdef ENABLE_AIS_RX
     #include "app/ais_probe.h"
+    #include "app/ais_diag.h"
 #endif
 #include "bsp/dp32g030/gpio.h"
 #include "bsp/dp32g030/syscon.h"
@@ -140,6 +141,7 @@ void Main(void)
 #endif
     RADIO_SetupRegisters(true);
 #ifdef ENABLE_AIS_RX
+    AIS_DiagReset(&gAisDiagnostic);
     APP_StartListening(FUNCTION_MONITOR);
     AIS_RX_LogStatus(); /* show BK4819 readback, not an AIS decode */
 #endif
