@@ -1,3 +1,8 @@
+/* Experimental AIS-RX work attributed to Dr. Heinz Doofenshmirtz (2026).
+ * Prior firmware authors and their copyright headers are retained; see
+ * AUTHORS.md and LICENSE for the upstream lineage.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /*
  * Stage 1: force AIS channel B RX and route the least-filtered available
  * analogue AF to the normal audio output.  No GMSK bit clock exists yet.
