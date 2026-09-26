@@ -27,6 +27,9 @@
 #include "app/app.h"
 #include "app/chFrScanner.h"
 #include "app/dtmf.h"
+#ifdef ENABLE_AIS_RX
+    #include "app/ais_diag.h"
+#endif
 #ifdef ENABLE_FLASHLIGHT
     #include "app/flashlight.h"
 #endif
@@ -1424,6 +1427,9 @@ void APP_TimeSlice10ms(void)
 #endif
     gNextTimeslice = false;
     gFlashLightBlinkCounter++;
+#ifdef ENABLE_AIS_RX
+    AIS_DiagPoll10ms(); /* RF activity only; never mark as AIS CRC valid */
+#endif
 
 #ifdef ENABLE_AM_FIX
     if (gRxVfo->Modulation == MODULATION_AM) {
