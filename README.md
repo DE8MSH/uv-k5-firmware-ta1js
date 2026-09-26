@@ -7,6 +7,45 @@
 > künstliche, gaußgefilterte AIS-Diskriminator-Aufnahmen einschließlich
 > NRZI/HDLC/CRC auswerten; reale BK4819-Aufnahmen sind noch ungetestet.
 
+## Ohne Audiokabel: direkt auf dem Funkgerät testen
+
+Die Firmware hat jetzt einen **eigenständigen AIS-Kanal-B-RF-Test auf dem
+UV-K5-Display**, ganz ohne Audiokabel, Audiointerface oder Computer während
+des Empfangs. Nur zum anfänglichen Flashen wird wie bisher dein übliches
+Programmierverfahren benötigt.
+
+Nach dem Start wird auf dem LCD angezeigt:
+
+```text
+AIS RX / RF TEST
+  162.025
+RX ONLY  |  NO TX
+RSSI -110 dBm
+RF PULSES: 0
+NO AIS DECODE YET
+```
+
+RSSI zeigt die momentane empfangene Signalstärke. `RF PULSES` zählt
+kurze, deutlich stärkere Funksignale von etwa 20–120 ms Länge auf
+162,025 MHz. Das ist **nur eine grobe RF-Aktivitätsprüfung**;
+jede andere kurze Aussendung, Störung oder ein Signal aus einem
+Nachbarkanal kann ebenfalls den Zähler erhöhen. **Ein Zählerstand
+von 1 bedeutet keinesfalls, dass eine gültige AIS-Nachricht erkannt
+wurde.** Die Abtastung läuft im normalen Firmware-Zeitfenster alle
+ungefähr 10 ms, das Display wird etwa fünfmal pro Sekunde aktualisiert.
+PTT ist in dieser Test-Firmware gesperrt.
+
+**Unser Ziel bleibt, vollständige AIS-Nachrichten im Funkgerät zu
+decodieren.** Dafür fehlt noch ein nachgewiesener Weg, auf dem
+der DP32G030 Mikrocontroller die **echten 9.600-bit/s-GMSK-Symbole**
+des BK4819 erhalten kann. Seine vorhandenen, in der Originalplatine
+genutzten SAR-ADC-Kanäle dienen zur Batterie- und Strommessung; die
+dokumentierte BK4819-FSK-Funktion kennt nur niedrigere Datenraten.
+Deshalb ist es derzeit **nicht belegt**, dass eine reine
+Firmware-Lösung für vollständigen AIS-Empfang ohne Hardwareänderung
+überhaupt möglich ist. Der RF-Test liefert uns einen ersten
+ehrlichen Hardware-Befund direkt auf dem Gerät.
+
 **AIS-Zweig: Dr. Heinz Doofenshmirtz.** Auf dem kleinen Display erscheint
 dafür die Kurzform `DR.H.DOOF`. Die vollständige Liste der früheren Autoren,
 Entwickler und Quellen steht in [AUTHORS.md](AUTHORS.md). Der bisherige
@@ -14,6 +53,8 @@ APRS-Ausgangszweig bleibt unverändert auf [`main`](../../tree/main).
 
 ## Was diese erste Version bereits kann
 
+- **Ohne Zusatzkabel:** auf dem UV-K5-Display RSSI und grob gezählte kurze
+  HF-Impulse auf 162,025 MHz anzeigen (keine AIS-Paketbestätigung).
 - BK4819 beim Start und beim erneuten Einrichten des Empfängers auf
   **162,025 MHz (AIS B)** stellen, FM-Empfang, 25-kHz-Kanalfilter.
 - 300-Hz-Hochpass, 3-kHz-Tiefpass und Deemphasis des RX-Audiowegs umgehen;
@@ -139,21 +180,19 @@ On-Air-Decodierung** mit dem UV-K5 vor.
 
 ## Das erste erwartete Ergebnis am UV-K5
 
-Nach dem Flashen sollte der Startbildschirm `DR.H.DOOF v0.1` und
-`AIS-RX Edition` anzeigen. Der BK4819 wird auf **162,025 MHz** gestellt;
-die Empfangsdaten laufen versuchsweise über den Filter-Bypass zum
-Audioausgang. Mit passender Antenne in einem Gebiet mit AIS-Funkverkehr
-könnten dort kurze AIS-Signalbursts messbar sein. **Ob überhaupt ein
-brauchbares Audiosignal herauskommt, ist noch ungetestet.** Auf dem
-Funkgerät selbst werden in dieser ersten Version noch **keine Schiffe**
-und **keine AIS-validierten Bits** angezeigt.
+Nach dem Flashen zeigt der Startbildschirm `DR.H.DOOF v0.1` und
+`AIS-RX Edition`. Danach erscheint die **eigenständige RSSI-/RF-Impuls-
+Anzeige** auf dem UV-K5. Du kannst also zunächst **ohne Audiokabel**
+prüfen, ob auf 162,025 MHz zeitlich kurze RF-Aktivität ankommt.
+**Schiffe, MMSI, Koordinaten oder gültige AIS-Bits zeigt diese Version
+noch nicht an.**
 
-Der erste sinnvolle Hardwaretest ist daher eine Aufnahme des Audioausgangs
-mit mindestens **48 ksample/s**, während ein bekannter AIS-Testburst
-**nur empfangen** wird. Danach prüfen wir Spektrum, Pegel und
-9.600-bit/s-Symbolinformation mit dem neuen PC-WAV-Decoder. Die Übertragung
-auf den Mikrocontroller wäre ein **separater späterer Schritt**, falls
-der BK4819 einen geeigneten Signalzugriff ermöglicht.
+Der erste Test ist jetzt die integrierte RF-Impuls-Anzeige des Geräts.
+Die ältere optionale Audioaufnahme mit dem PC-WAV-Decoder bleibt nur ein
+**zusätzlicher Laborweg**, falls später ein passendes Kabel verfügbar ist.
+Für echten, vollständig integrierten AIS-Empfang muss zuerst geklärt
+werden, ob der BK4819 GMSK-Symbole ohne eine interne Hardwareänderung
+in den Mikrocontroller liefern kann.
 Die Prüfschritte und BK4819-Register sind in
 [docs/AIS_RX.md](docs/AIS_RX.md) dokumentiert.
 
