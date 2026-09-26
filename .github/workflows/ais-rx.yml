@@ -1,0 +1,35 @@
+name: AIS RX experimental build
+
+on:
+  push:
+    branches: [ ais-rx ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run AIS post-demodulator host tests
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Iapp \
+             app/ais_bits.c utils/ais_bits_test.c -o /tmp/ais_bits_test
+          /tmp/ais_bits_test
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '10.3-2021.10'
+      - name: Build the receive-only experimental firmware
+        run: |
+          make clean
+          make -j"$(nproc)" ENABLE_AIS_RX=1
+          size=$(stat -c%s f4hwn.bin)
+          echo "Experimental AIS RX image: $size / 61440 bytes"
+          test "$size" -le 61440
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AIS-RX-EXPERIMENTAL-NOT-DECODED
+          path: f4hwn.bin
+          retention-days: 7
