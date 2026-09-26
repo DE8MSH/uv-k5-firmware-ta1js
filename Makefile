@@ -45,6 +45,9 @@ ENABLE_APRS                     ?= 1
 # AIS branch defaults to receive-only 162.025 MHz. Use ENABLE_AIS_RX=0
 # explicitly for a legacy/APRS build; the PTT is disabled for AIS builds.
 ENABLE_AIS_RX                   ?= 1
+# Compare two documented AF paths for a real 9600-baud capture:
+# 9 = Beken digital RX bypass (default), 1 = FM audio with filters disabled.
+AIS_AF_ROUTE                    ?= 9
 ifeq ($(ENABLE_AIS_RX),1)
     ENABLE_APRS := 0
     ENABLE_AMATEUR_BAND_ONLY := 0
@@ -523,7 +526,7 @@ ifeq ($(ENABLE_UART_RW_BK_REGS),1)
 	CFLAGS  += -DENABLE_UART_RW_BK_REGS
 endif
 ifeq ($(ENABLE_AIS_RX),1)
-	CFLAGS  += -DENABLE_AIS_RX
+	CFLAGS  += -DENABLE_AIS_RX -DAIS_AF_ROUTE=$(AIS_AF_ROUTE)
 endif
 ifeq ($(ENABLE_UART_RC),1)
 	CFLAGS  += -DENABLE_UART_RC
