@@ -33,6 +33,12 @@ jobs:
           /tmp/ais_af_test --noise /tmp/ais_af_noise.wav
           /tmp/ais_af_wav /tmp/ais_af_noise.wav | tee /tmp/ais_af_noise.log
           grep -q 'CRC valid=0' /tmp/ais_af_noise.log
+      - name: Test standalone on-radio RF pulse diagnostic
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Iapp \
+             app/ais_diag_core.c utils/ais_diag_test.c \
+             -o /tmp/ais_diag_test
+          /tmp/ais_diag_test
       - name: Check AIS Docker helper shell syntax
         run: sh -n compile-with-docker.sh
       - uses: carlosperate/arm-none-eabi-gcc-action@v1
