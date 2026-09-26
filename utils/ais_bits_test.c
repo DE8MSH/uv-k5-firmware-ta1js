@@ -1,3 +1,8 @@
+/* Experimental AIS-RX work attributed to Dr. Heinz Doofenshmirtz (2026).
+ * Prior firmware authors and their copyright headers are retained; see
+ * AUTHORS.md and LICENSE for the upstream lineage.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /*
  * Host-only deterministic test for the experimental AIS NRZI/HDLC/CRC checker.
  * No radio, no microphone, no on-air assertions.
