@@ -315,7 +315,7 @@ ifeq ($(ENABLE_FEAT_F4HWN),1)
 	# requested author name in README, AUTHORS.md and UART identification.
 	ifeq ($(ENABLE_AIS_RX),1)
 		AUTHOR_STRING_2 := DR.H.DOOF
-		VERSION_STRING_2 := v0.1
+		VERSION_STRING_2 := v0.2
 		EDITION_STRING := AIS-RX
 	endif
 
