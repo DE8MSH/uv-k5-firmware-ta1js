@@ -1038,9 +1038,22 @@ void RADIO_SetModulation(ModulationMode_t modulation)
 
 #ifdef ENABLE_AIS_RX
     if (modulation == MODULATION_FM)
-        mod = BK4819_AF_UNKNOWN3; /* digital-radio RX AF bypass, REG_47 = 9 */
+    {
+#if AIS_AF_ROUTE == 9
+        mod = BK4819_AF_UNKNOWN3; /* digital-radio RX bypass, REG_47=9 */
+#elif AIS_AF_ROUTE == 1
+        mod = BK4819_AF_FM;       /* FM-AF control experiment, REG_47=1 */
+#else
+#error AIS_AF_ROUTE must be 9 or 1
+#endif
+    }
 #endif
     BK4819_SetAF(mod);
+#if defined(ENABLE_AIS_RX) && AIS_AF_ROUTE == 9
+    if (modulation == MODULATION_FM)
+        BK4819_WriteRegister(BK4819_REG_47,
+            (uint16_t)(BK4819_ReadRegister(BK4819_REG_47) | 0x0002u));
+#endif
 
     BK4819_SetRegValue(afDacGainRegSpec, 0xF);
     BK4819_WriteRegister(BK4819_REG_3D, modulation == MODULATION_USB ? 0 : 0x2AAB);
