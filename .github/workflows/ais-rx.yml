@@ -18,6 +18,8 @@ jobs:
           cc -std=c11 -Wall -Wextra -Werror -Iapp \
              app/ais_bits.c utils/ais_bits_test.c -o /tmp/ais_bits_test
           /tmp/ais_bits_test
+      - name: Check AIS Docker helper shell syntax
+        run: sh -n compile-with-docker.sh
       - uses: carlosperate/arm-none-eabi-gcc-action@v1
         with:
           release: '10.3-2021.10'
