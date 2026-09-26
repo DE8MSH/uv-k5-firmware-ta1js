@@ -1,3 +1,8 @@
+/* Experimental AIS-RX work attributed to Dr. Heinz Doofenshmirtz (2026).
+ * Prior firmware authors and their copyright headers are retained; see
+ * AUTHORS.md and LICENSE for the upstream lineage.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /* Experimental AIS NRZI/HDLC frame checker; no RF demodulator included.
  * This interface accepts ONE hard-decision NRZI symbol at a time.
  */
