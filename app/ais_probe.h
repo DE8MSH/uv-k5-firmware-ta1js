@@ -11,5 +11,7 @@
 #define AIS_RX_FREQUENCY_10HZ 16202500u
 
 void AIS_RX_Configure(void);
+/* Prints RF/filter/audio readback through the existing optional UART. */
+void AIS_RX_LogStatus(void);
 
 #endif
