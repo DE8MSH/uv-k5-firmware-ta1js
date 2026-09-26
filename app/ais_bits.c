@@ -1,3 +1,8 @@
+/* Experimental AIS-RX work attributed to Dr. Heinz Doofenshmirtz (2026).
+ * Prior firmware authors and their copyright headers are retained; see
+ * AUTHORS.md and LICENSE for the upstream lineage.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /* Experimental AIS bit checker, independent of the BK4819 RF path.
  * HDLC flags, bit de-stuffing and CRC-16/X-25 are used by AIS.
  * No bit is considered received until a GMSK demodulator supplies symbols.
