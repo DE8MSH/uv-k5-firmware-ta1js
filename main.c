@@ -45,6 +45,9 @@
 #ifdef ENABLE_APRS
     #include "app/aprs_minimal.h"
 #endif
+#ifdef ENABLE_AIS_RX
+    #include "app/ais_probe.h"
+#endif
 #include "bsp/dp32g030/gpio.h"
 #include "bsp/dp32g030/syscon.h"
 
@@ -126,7 +129,19 @@ void Main(void)
 
     RADIO_SelectVfos();
 
+#ifdef ENABLE_AIS_RX
+    /* Probe build: single VFO, no powersave or squelch wait for 26 ms AIS bursts. */
+    gEeprom.DUAL_WATCH = DUAL_WATCH_OFF;
+    gEeprom.BATTERY_SAVE = 0;
+    gRxVfo->freq_config_RX.Frequency = AIS_RX_FREQUENCY_10HZ;
+    gRxVfo->pRX->Frequency = AIS_RX_FREQUENCY_10HZ;
+    gRxVfo->Modulation = MODULATION_FM;
+    gRxVfo->CHANNEL_BANDWIDTH = BK4819_FILTER_BW_WIDE;
+#endif
     RADIO_SetupRegisters(true);
+#ifdef ENABLE_AIS_RX
+    APP_StartListening(FUNCTION_MONITOR);
+#endif
 
     for (unsigned int i = 0; i < ARRAY_SIZE(gBatteryVoltages); i++)
         BOARD_ADC_GetBatteryInfo(&gBatteryVoltages[i], &gBatteryCurrent);
