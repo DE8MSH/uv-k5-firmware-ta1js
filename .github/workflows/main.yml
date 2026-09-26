@@ -1,4 +1,4 @@
-name: Build firmware
+name: Legacy APRS publisher (main / APRS branches)
 
 # Builds both band variants and publishes them as release assets, so
 # uvk5.canata.dev can fetch the newest firmware straight from GitHub:
@@ -21,6 +21,8 @@ permissions:
 
 jobs:
   build:
+    # The AIS branch has its own RX-only workflow; never publish it as APRS.
+    if: github.ref != 'refs/heads/ais-rx'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,10 +40,10 @@ jobs:
           set -eu
           mkdir -p out
           make clean
-          make -j"$(nproc)" ENABLE_AMATEUR_BAND_ONLY=1
+          make -j"$(nproc)" ENABLE_AIS_RX=0 ENABLE_AMATEUR_BAND_ONLY=1
           cp f4hwn.bin out/ta1js-aprs-amateur.bin
           make clean
-          make -j"$(nproc)" ENABLE_AMATEUR_BAND_ONLY=0
+          make -j"$(nproc)" ENABLE_AIS_RX=0 ENABLE_AMATEUR_BAND_ONLY=0
           cp f4hwn.bin out/ta1js-aprs-allband.bin
 
       # 61440 bytes is the whole program area. Overflowing it yields a radio
