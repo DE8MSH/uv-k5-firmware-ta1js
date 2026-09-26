@@ -71,9 +71,9 @@ Die angepasste Version des vorhandenen Skripts unterstützt `aisrx`:
 # Ergebnis: compiled-firmware/ais-rx-162025-rx-only.bin
 ```
 
-**Hinweis:** Das ältere Docker-Helferskript bereinigt Docker-Images und
-ungenutzte Docker-Ressourcen. Wer dies nicht möchte, benutzt den Make-Build
-oben oder den GitHub-Actions-Download.
+**Hinweis:** Der neue `aisrx`-Zweig im Docker-Skript vermeidet das
+frühere globale `docker system prune`. Die weiterhin vorhandenen alten
+Docker-Buildvarianten können dagegen ungenutzte Docker-Ressourcen bereinigen.
 
 ## Das erste erwartete Ergebnis am UV-K5
 
