@@ -149,6 +149,9 @@ void FUNCTION_PowerSave() {
 
 void FUNCTION_Transmit()
 {
+#ifdef ENABLE_AIS_RX
+    return;  /* belt-and-braces: cannot transmit from a second call path */
+#endif
     // if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
     BK4819_DisableDTMF();
 
@@ -244,6 +247,10 @@ void FUNCTION_Transmit()
 
 void FUNCTION_Select(FUNCTION_Type_t Function)
 {
+#ifdef ENABLE_AIS_RX
+    if (Function == FUNCTION_TRANSMIT || Function == FUNCTION_POWER_SAVE)
+        return;
+#endif
     const FUNCTION_Type_t PreviousFunction = gCurrentFunction;
     const bool bWasPowerSave = PreviousFunction == FUNCTION_POWER_SAVE;
 
