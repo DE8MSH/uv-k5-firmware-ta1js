@@ -1,218 +1,154 @@
-# UV-K5 APRS — a self-contained APRS station for the Quansheng UV-K5/K6/5R
+# UV-K5 AIS-RX — experimenteller AIS-Empfänger (162,025 MHz)
 
-This firmware turns a Quansheng UV-K5/K6/5R handheld into a standalone **APRS
-station** — 1200 baud Bell 202 (AX.25) transmit *and* receive using only the
-radio's BK4819 chip. No sound card, no external TNC, no phone app required to
-be on the air.
+> **AIS-Laborversion, kein fertiger AIS-Decoder.** Dieser Branch `ais-rx`
+> startet den Quansheng UV-K5/K6/5R als **reinen Empfänger auf AIS-Kanal B
+> (162,025 MHz)**. Die GMSK-Demodulation eines echten Funksignals ist
+> **noch nicht implementiert**. Die eigenständige Bit-/HDLC-/CRC-Prüfung
+> funktioniert bisher nur mit künstlich erzeugten Testdaten.
 
-Verified on-air between two UV-K5s and against the live 144.800 MHz network
-(beacons digipeated and igated onto aprs.fi; packets from other stations
-decoded and shown on screen).
+**AIS-Zweig: Dr. Heinz Doofenshmirtz.** Auf dem kleinen Display erscheint
+dafür die Kurzform `DR.H.DOOF`. Die vollständige Liste der früheren Autoren,
+Entwickler und Quellen steht in [AUTHORS.md](AUTHORS.md). Der bisherige
+APRS-Ausgangszweig bleibt unverändert auf [`main`](../../tree/main).
 
-It is a fork of [F4HWN's custom firmware](https://github.com/armel/uv-k5-firmware-custom),
-which builds on [Egzumer](https://github.com/egzumer/uv-k5-firmware-custom),
-[OneOfEleven](https://github.com/OneOfEleven/uv-k5-firmware-custom),
-[fagci's spectrum analyzer](https://github.com/fagci/uv-k5-firmware-fagci-mod),
-and ultimately [DualTachyon's open firmware](https://github.com/DualTachyon/uv-k5-firmware).
-All the stock radio features from those projects are still present — this fork
-adds the APRS layer on top.
+## Was diese erste Version bereits kann
 
-> [!IMPORTANT]
-> **Licensed amateurs only.** APRS transmits on amateur frequencies. You must
-> hold a valid amateur licence and set **your own callsign** before the radio
-> will key up. A fresh or reset radio ships as `N0CALL` and refuses to transmit
-> until a real callsign is configured. Transmit is limited to amateur bands by
-> default.
+- BK4819 beim Start und beim erneuten Einrichten des Empfängers auf
+  **162,025 MHz (AIS B)** stellen, FM-Empfang, 25-kHz-Kanalfilter.
+- 300-Hz-Hochpass, 3-kHz-Tiefpass und Deemphasis des RX-Audiowegs umgehen;
+  experimentellen Digital-RX-AF-Bypass an den analogen Audioausgang legen.
+- Squelch für den anfänglichen Empfangsversuch umgehen und den
+  Energiesparmodus abschalten.
+- **Nur RX:** PTT und mehrere interne Wege in den TX-Modus sind gesperrt.
+- Mit dem unabhängigen, bereits programmierten C-Testmodul künstliche
+  9.600-bit/s-NRZI/HDLC-Daten auf AIS-Flags, Bit-Stuffing, CRC-16/X-25,
+  AIS-Nachrichtentyp und MMSI prüfen.
 
-> [!WARNING]
-> This firmware comes with no warranty of any kind. Use it entirely at your own
-> risk. There is no guarantee it will work on your radio, and flashing
-> third-party firmware can in principle brick a radio. You accept that risk when
-> you flash.
+**Was ausdrücklich noch nicht geht:** echte GMSK-Symbole aus dem BK4819
+gewinnen, reale AIS-Pakete empfangen/decodieren oder MMSI, Schiffsnamen,
+Koordinaten und Kurs auf dem Funkgerät anzeigen. Die 9.600-bit/s-Bitprüfung
+ist noch **nicht** an die Funkhardware angeschlossen. Ob der gewählte
+AF-Bypass genügend Signalbandbreite liefert, muss zuerst am realen Gerät
+gemessen werden. **Nicht als Navigations- oder Sicherheitsgerät verwenden.**
 
-> [!CAUTION]
-> Back up your EEPROM before flashing any alternative firmware. `utils/eeprom_tool.py`
-> can take a full 8 KB dump, or use [k5prog](https://github.com/sq5bpf/k5prog).
-> It is a good habit and can save you if something goes wrong.
+## Firmware selbst bauen
 
-## Contents
-
-* [What it does](#what-it-does)
-* [How it works](#how-it-works)
-* [Building](#building)
-* [Flashing](#flashing)
-* [Configuring your station](#configuring-your-station)
-* [Companion tools](#companion-tools)
-* [Documentation](#documentation)
-* [Credits](#credits)
-* [License](#license)
-
-## What it does
-
-- **Beacon your position** — manually, or automatically on an interval
-  (1–60 min keep-alive). Position, callsign/SSID and comment are all
-  menu-configured; nothing is hardcoded.
-- **Receive and decode** packets off the air — standard uncompressed, Mic-E,
-  and base-91 compressed positions — and show the sender and its **distance
-  from your saved location** on screen.
-- **Messaging** — send short APRS text messages. An incoming message addressed
-  to your callsign pops up in a framed overlay box; it auto-clears after 30 s
-  or is dismissed by any key, and the menu's **RdMsg** item calls the last one
-  back up until the next message or the next power-up replaces it.
-- **PC / phone control over USB** — send a beacon or message and monitor
-  decoded traffic from a computer, or beacon a live GPS fix from the companion
-  web tool.
-- **Persistent config** — callsign, SSID, location and message target are
-  stored in EEPROM and survive a reboot.
-- **Amateur-band restriction** — VFO and TX are limited to the amateur
-  allocations reachable by the radio (optional; on by default).
-
-Everything the base F4HWN firmware does (multiple screen layouts, improved
-S-meter, power levels, scan lists, and so on) still works alongside APRS.
-
-## How it works
-
-APRS is generated and decoded entirely in software on the radio, driving the
-BK4819's hardware FSK engine — there is no external modem.
-
-- **TX** — an AX.25 UI frame is built in software with a CRC-16/X.25 FCS,
-  HDLC-encoded (bit stuffing + NRZI), and clocked out by the BK4819's FSK
-  engine configured for Bell 202 1200/2200 Hz tones. No software bit-banging.
-- **RX** — while APRS is on, the FSK engine is armed to hunt for AX.25 flags; a
-  streaming software decoder does NRZI decode, bit destuffing and FCS checking,
-  then parses the position and displays it.
-
-The full register recipe, frame format and decoder details are documented in
-[`docs/APRS.md`](docs/APRS.md) and the reference PDFs under `docs/bk4819/`.
-
-## Building
-
-`arm-none-eabi-gcc` **10.3.1** is recommended (other versions may produce a
-binary that is too large for the 60 KB flash). On macOS, `brew install
-arm-none-eabi-gcc` works.
+Voraussetzungen: Git, Make, die ARM-Embedded-Toolchain
+(`arm-none-eabi-gcc`, **10.3.1 empfohlen**) und für den optionalen
+Flash-Vorgang Python 3 mit `pyserial`. Linux, macOS oder Windows mit WSL
+sind geeignete Entwicklungsumgebungen.
 
 ```bash
-make                     # APRS edition — this is the default build
-make ENABLE_APRS=0       # plain radio, no APRS
+git clone --branch ais-rx https://github.com/DE8MSH/uv-k5-firmware-ta1js.git
+cd uv-k5-firmware-ta1js
+make clean
+make -j4 ENABLE_AIS_RX=1
+arm-none-eabi-size f4hwn
+wc -c f4hwn.bin
 ```
 
-To fit the flash budget, the APRS edition disables several stock features by
-default (VOX, TX1750, mic audio bar, small-bold font, RX/TX timer, sleep, FM
-radio, spectrum analyzer). Re-enable any of them per build if you free up space.
+**Ergebnis:** `f4hwn.bin` ist die **rohe** experimentelle AIS-RX-Firmware.
+Sie darf **61.440 Byte** nicht überschreiten. Auf diesem Branch baut auch
+`make` standardmäßig die AIS-Version; `ENABLE_AIS_RX=1` steht oben
+absichtlich nochmals ausdrücklich im Befehl.
 
-Key flags:
+### Ganz ohne lokale ARM-Toolchain
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `ENABLE_APRS` | `1` | The whole APRS suite. |
-| `ENABLE_AMATEUR_BAND_ONLY` | `1` | Restrict VFO/TX to amateur allocations. Set `=0` to remove. |
+Jeder Push auf `ais-rx` startet den separaten
+[GitHub-Actions-Build „AIS RX experimental build“](../../actions/workflows/ais-rx.yml).
+Dort den letzten **erfolgreichen Lauf** öffnen, unter **Artifacts** das
+`AIS-RX-EXPERIMENTAL-NOT-DECODED`-Archiv laden und entpacken.
+Es enthält ebenfalls die rohe `f4hwn.bin`; diese Test-Artefakte werden
+nur **sieben Tage** aufbewahrt. Sie gehören nicht zu den regulären
+APRS-Releases und sind ausdrücklich keine getesteten AIS-Empfangsgeräte.
 
-Output files: `f4hwn` (ELF), `f4hwn.bin` (raw — this is what the flasher
-needs), and `f4hwn.packed.bin` (needs the Python `crcmod` package). Check the
-size of every change with `arm-none-eabi-size f4hwn`.
+### Optional: Docker
 
-A Docker build is also available: `./compile-with-docker.sh <edition>` writes
-to `compiled-firmware/`.
-
-## Flashing
-
-Put the radio into flash mode (hold **PTT** while powering on — the LED lights),
-then flash the **raw** `f4hwn.bin`.
-
-On macOS, use the bundled pyserial flasher:
+Die angepasste Version des vorhandenen Skripts unterstützt `aisrx`:
 
 ```bash
-python utils/k5flash.py /dev/cu.wchusbserial1110 f4hwn.bin '*YOURCALL v1.0'
+./compile-with-docker.sh aisrx
+# Ergebnis: compiled-firmware/ais-rx-162025-rx-only.bin
 ```
 
-The version string must start with `*` (the wildcard bypasses the bootloader's
-version check).
+**Hinweis:** Das ältere Docker-Helferskript bereinigt Docker-Images und
+ungenutzte Docker-Ressourcen. Wer dies nicht möchte, benutzt den Make-Build
+oben oder den GitHub-Actions-Download.
 
-> [!NOTE]
-> **macOS driver caveat:** Apple's built-in CH34x serial driver is broken on
-> current macOS (Darwin 25.5+) — `tcsetattr` fails, which breaks most flashers.
-> Install the vendor driver once per machine:
-> ```bash
-> brew install --cask wch-ch34x-usb-serial-driver
-> ```
-> Approve it in System Settings and replug. The adapter then appears as
-> `/dev/cu.wchusbserial*`.
+## Das erste erwartete Ergebnis am UV-K5
 
-## Configuring your station
+Nach dem Flashen sollte der Startbildschirm `DR.H.DOOF v0.1` und
+`AIS-RX Edition` anzeigen. Der BK4819 wird auf **162,025 MHz** gestellt;
+die Empfangsdaten laufen versuchsweise über den Filter-Bypass zum
+Audioausgang. Mit passender Antenne in einem Gebiet mit AIS-Funkverkehr
+könnten dort kurze AIS-Signalbursts messbar sein. **Ob überhaupt ein
+brauchbares Audiosignal herauskommt, ist noch ungetestet.** Auf dem
+Funkgerät selbst werden in dieser ersten Version noch **keine Schiffe**
+und **keine AIS-validierten Bits** angezeigt.
 
-Set your callsign, SSID and location from the on-radio APRS menu group
-(**APRS, Intv, Call, SSID, Loc, Cmnt, MsgTo, Msg, Send, TX**). Text fields use
-two-digit-per-character entry; location is a 15-digit code.
+Der erste sinnvolle Hardwaretest ist daher eine Aufnahme des Audioausgangs
+mit mindestens **48 ksample/s**, während ein bekannter AIS-Testburst
+**nur empfangen** wird. Danach prüfen wir Spektrum, Pegel und
+9.600-bit/s-Symbolinformation; erst im nächsten Schritt wird ein
+GMSK-Demodulator mit `AIS_BitsPushNRZI()` verbunden.
+Die Prüfschritte und BK4819-Register sind in
+[docs/AIS_RX.md](docs/AIS_RX.md) dokumentiert.
 
-The easiest way to enter your location is the companion tool
-`utils/aprs-location.html` — open it on a phone, let it read GPS, and it prints
-the 15-digit code (and encodes text fields for you) to key into the radio.
+## Sicher flashen
 
-## Companion tools
+**Vorher EEPROM sichern** (einschließlich Kalibrierung), z. B. mit
+`utils/eeprom_tool.py` oder
+[`k5prog`](https://github.com/sq5bpf/k5prog). Fremde Firmware wird
+auf eigenes Risiko geflasht.
 
-Under `utils/`:
+1. Funkgerät ausschalten; **PTT gedrückt halten** und einschalten,
+   um den Bootloader zu starten.
+2. Bei Bedarf `python3 -m pip install pyserial` ausführen.
+3. Das **rohe** `f4hwn.bin` auf die zutreffende serielle Schnittstelle
+   flashen (Portnamen unten entsprechend ersetzen).
 
-- **`aprs-location.html`** — phone GPS → 15-digit location code and text-field encoder.
-- **`aprs-web-beacon.html`** — beacon a live GPS fix over USB from a browser.
-- **`aprs_pc.py`** — send a beacon/message and monitor decoded traffic from a PC:
-  `aprs_pc.py <port> msg <DEST> <text>` / `beacon` / `monitor`.
-- **`k5flash.py`** — the flasher described above.
-- **`eeprom_tool.py`** — full EEPROM backup / probe / settings wipe (calibration preserved).
-- **`aprs_hdlc_test.c`** — host-side copy of the encoder and decoders, checked
-  against spec vectors, for verifying changes without a radio:
-  ```bash
-  cc -Wall -o /tmp/hdlc_test utils/aprs_hdlc_test.c && /tmp/hdlc_test
-  ```
+```bash
+python3 utils/k5flash.py /dev/ttyUSB0 f4hwn.bin '*AIS RX v0.1'
+```
 
-## Documentation
+Unter macOS kann der Port `/dev/cu.wchusbserial*` heißen, unter Windows
+beispielsweise `COM3`. **Nicht** das `.packed.bin` verwenden.
+Nach dem Neustart als erstes testen, dass PTT **nicht sendet**.
 
-- **[`docs/APRS.md`](docs/APRS.md)** — user guide plus the full technical
-  writeup (frame format, BK4819 register recipe, RX decoder, EEPROM layout).
-- **`docs/bk4819/`** — the official Beken datasheet, technical reference manual,
-  register list and application note.
+## AIS-Bits ohne Funkhardware testen
 
-## Credits
+```bash
+cc -std=c11 -Wall -Wextra -Werror -Iapp \
+   app/ais_bits.c utils/ais_bits_test.c -o /tmp/ais_bits_test
+/tmp/ais_bits_test
+```
 
-This firmware stands on a long chain of open-source work. Thanks to everyone in
-it, and to the many contributors who came before:
+Dieser Host-Test prüft CRC-16/X-25, NRZI, AIS-Typ 1, MMSI und die Ablehnung
+einer korrupten Nachricht. Er ist **kein** Empfangstest des BK4819.
 
-* [F4HWN (Armel)](https://github.com/armel) — the immediate upstream this fork is based on
-* [Egzumer](https://github.com/egzumer)
-* [OneOfEleven](https://github.com/OneOfEleven)
-* [DualTachyon](https://github.com/DualTachyon) — the original open firmware
-* [Mikhail (fagci)](https://github.com/fagci) — spectrum analyzer
-* [Andrej](https://github.com/Tunas1337)
-* [Manuel](https://github.com/manujedi)
-* [@Matoz](https://github.com/spm81)
-* @wagner, @Lohtse Shar, @Davide, @Ismo OH2FTG, @d1ced95
-* and others who contributed along the way
+## Decoder-Referenz und ursprüngliche Firmware
 
-The APRS position decoders are ported from the F4JTV `aprs_decoder` work.
+Die aktuelle, interessante C99-Referenz ist
+[Pieter Ibelings’ `libaisdemod`](https://github.com/ibelinp/libaisdemod)
+(MIT, 2026). Sie demoduliert **komplexe SDR-I/Q-Samples**, nicht unmittelbar
+den experimentellen BK4819-Audioausgang, und ist deshalb **noch nicht in die
+Firmware integriert**. Wir wollen zunächst die Übertragbarkeit des
+`frame.c`-/`message.c`-Teils und die Signalqualität am echten Gerät
+prüfen. Eine zweite C-Referenz ist
+[hessu/gnuais](https://github.com/hessu/gnuais) (GPL-2.0).
 
-## License
+Der ursprüngliche [APRS-Code](docs/APRS.md) und die bestehenden
+APRS-Werkzeuge verbleiben im Repository, sind bei `ENABLE_AIS_RX=1`
+jedoch abgeschaltet. Für einen bisherigen APRS-Versuchsbuild explizit
+`make clean && make ENABLE_AIS_RX=0 ENABLE_APRS=1` verwenden;
+die produktiven APRS-Releases stammen weiterhin aus `main`.
 
-Copyright 2023 Dual Tachyon
-https://github.com/DualTachyon
+## Autoren und Lizenz
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-## Sponsorlar / Sponsors
-
-Bu projeyi [GitHub Sponsors](https://github.com/sponsors/bcanata) üzerinden destekleyebilirsiniz.
-Destekçilerin adı (ve kurumsal destekçilerin logosu) aşağıda yer alır.
-
-You can support this project via [GitHub Sponsors](https://github.com/sponsors/bcanata).
-Sponsors are listed below, with logos for organisation-tier sponsors.
-
-<!-- sponsors -->
-<!-- /sponsors -->
+**AIS-Branch: Dr. Heinz Doofenshmirtz.** Alle im bisherigen README
+genannten Vorgänger und Mitwirkenden — darunter DE8MSH/TA1JS, F4HWN,
+Egzumer, OneOfEleven, DualTachyon, fagci und die weiteren Beteiligten —
+sind einzeln in [AUTHORS.md](AUTHORS.md) aufgeführt.
+Die vorhandenen Copyright-Köpfe und die
+[Apache-2.0-Lizenz](LICENSE) bleiben erhalten. Fremde Decoder-Codes
+werden hier nicht unbemerkt übernommen.
