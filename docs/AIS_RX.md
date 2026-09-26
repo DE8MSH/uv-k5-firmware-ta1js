@@ -157,6 +157,23 @@ the startup register readbacks, audio RMS and peak, and PC CRC-valid
 packet counts. If either route produces real CRC-verified packets,
 only then investigate a practical input path into the DP32G030 MCU.
 
+## Why the host decoder is not yet installed on the radio
+
+The existing firmware configures the DP32G030 SAR ADC for **channel 4
+(battery voltage)** and **channel 9 (battery current)** in
+[board.c](../board.c), not for an AF signal from the BK4819. Merely
+routing the BK4819 AF to the speaker does **not** establish an electrical
+connection to an MCU ADC input or a 48/96-ksample/s DMA acquisition
+path. We should not repurpose either battery-monitor channel, assert
+that the BK4819's 1.2/2.4-kbps FSK FIFO contains AIS, or attempt UART
+audio streaming without verifying the hardware and throughput.
+
+A **verified physical audio sample path or digital 9.6-kbaud symbol
+path** is the prerequisite for an on-device GMSK decoder. The real
+AF9/AF1 WAV experiment isolates that question first; if neither
+recording preserves 9.6-kbaud information, firmware-only message
+decoding cannot fix the lost signal.
+
 ## Bench checklist / next decision
 
 1. Flash **only an intentionally built `ENABLE_AIS_RX=1` image**, after an
