@@ -19,9 +19,6 @@
 
 #include "app/chFrScanner.h"
 #include "app/dtmf.h"
-#ifdef ENABLE_AIS_RX
-    #include "app/ais_diag.h"
-#endif
 #ifdef ENABLE_APRS
     #include "app/aprs_minimal.h"
 #endif
@@ -546,17 +543,17 @@ void UI_DisplayMain(void)
         return;
     }
 #ifdef ENABLE_AIS_RX
-    /* Independent on-device field test. RSSI envelope is NOT GMSK:
-     * these are possible RF bursts, not decoded AIS messages. */
-    UI_PrintStringSmallBold("AIS RX / RF TEST", 2, 0, 0);
+    /* Independent on-device field te#ifdef ENABLE_AIS_RX
+    /* This is a receiver feasibility build, NOT an AIS receiver.
+     * RF amplitude cannot discriminate AIS from noise/interference.
+     * Do not display any "AIS" count until a CRC-validated GMSK
+     * symbol stream is available inside the radio. */
+    UI_PrintStringSmallBold("AIS RX - LAB ONLY", 2, 0, 0);
     UI_PrintString("162.025", 0, LCD_WIDTH, 1, 8);
-    UI_PrintStringSmallNormal("RX ONLY  |  NO TX", 2, 0, 3);
-    sprintf(String, "RSSI %d dBm",
-        ((int)gAisDiagnostic.last_rssi / 2) - 160);
-    UI_PrintStringSmallNormal(String, 2, 0, 4);
-    sprintf(String, "RF PULSES: %u", gAisDiagnostic.rf_pulses);
-    UI_PrintStringSmallNormal(String, 2, 0, 5);
-    UI_PrintStringSmallNormal("NO AIS DECODE YET", 2, 0, 6);
+    UI_PrintStringSmallNormal("RX ONLY  /  NO TX", 2, 0, 3);
+    UI_PrintStringSmallNormal("GMSK: NO DATA PATH", 2, 0, 4);
+    UI_PrintStringSmallNormal("AIS DECODE: OFF", 2, 0, 5);
+    UI_PrintStringSmallNormal("NO PACKET CLAIMS", 2, 0, 6);
     ST7565_BlitFullScreen();
     return;
 #endif
