@@ -543,7 +543,6 @@ void UI_DisplayMain(void)
         return;
     }
 #ifdef ENABLE_AIS_RX
-    /* Independent on-device field te#ifdef ENABLE_AIS_RX
     /* This is a receiver feasibility build, NOT an AIS receiver.
      * RF amplitude cannot discriminate AIS from noise/interference.
      * Do not display any "AIS" count until a CRC-validated GMSK
