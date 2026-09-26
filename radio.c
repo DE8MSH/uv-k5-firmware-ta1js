@@ -34,6 +34,9 @@
 #include "helper/battery.h"
 #include "misc.h"
 #include "radio.h"
+#ifdef ENABLE_AIS_RX
+    #include "app/ais_probe.h"
+#endif
 #include "settings.h"
 #include "ui/menu.h"
 
@@ -685,6 +688,10 @@ void RADIO_SelectVfos(void)
 void RADIO_SetupRegisters(bool switchToForeground)
 {
     BK4819_FilterBandwidth_t Bandwidth = gRxVfo->CHANNEL_BANDWIDTH;
+#ifdef ENABLE_AIS_RX
+    gRxVfo->Modulation = MODULATION_FM;
+    Bandwidth = BK4819_FILTER_BW_WIDE;
+#endif
 
     #ifdef ENABLE_FEAT_F4HWN_NARROWER
         if(Bandwidth == BK4819_FILTER_BW_NARROW && gSetting_set_nfm == 1)
@@ -745,6 +752,10 @@ void RADIO_SetupRegisters(bool switchToForeground)
     #else
         Frequency = gRxVfo->pRX->Frequency;
     #endif
+#ifdef ENABLE_AIS_RX
+    Frequency = AIS_RX_FREQUENCY_10HZ;
+    gRxVfo->pRX->Frequency = Frequency;
+#endif
     BK4819_SetFrequency(Frequency);
 
     BK4819_SetupSquelch(
@@ -879,6 +890,9 @@ void RADIO_SetupRegisters(bool switchToForeground)
 
     if (switchToForeground)
         FUNCTION_Select(FUNCTION_FOREGROUND);
+#ifdef ENABLE_AIS_RX
+    AIS_RX_Configure(); /* the normal setup path otherwise restores voice filters */
+#endif
 }
 
 #ifdef ENABLE_NOAA
@@ -1022,6 +1036,10 @@ void RADIO_SetModulation(ModulationMode_t modulation)
 #endif
     }
 
+#ifdef ENABLE_AIS_RX
+    if (modulation == MODULATION_FM)
+        mod = BK4819_AF_UNKNOWN3; /* digital-radio RX AF bypass, REG_47 = 9 */
+#endif
     BK4819_SetAF(mod);
 
     BK4819_SetRegValue(afDacGainRegSpec, 0xF);
@@ -1080,6 +1098,10 @@ void RADIO_SetVfoState(VfoState_t State)
 
 void RADIO_PrepareTX(void)
 {
+#ifdef ENABLE_AIS_RX
+    RADIO_SetVfoState(VFO_STATE_TX_DISABLE); /* passive AIS probe: PTT blocked */
+    return;
+#endif
     VfoState_t State = VFO_STATE_NORMAL;  // default to OK to TX
 
     if (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF)
