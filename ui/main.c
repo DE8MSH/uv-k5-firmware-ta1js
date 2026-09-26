@@ -552,7 +552,7 @@ void UI_DisplayMain(void)
     UI_PrintString("162.025", 0, LCD_WIDTH, 1, 8);
     UI_PrintStringSmallNormal("RX ONLY  |  NO TX", 2, 0, 3);
     sprintf(String, "RSSI %d dBm",
-        (int)((gAisDiagnostic.last_rssi / 2u) - 160));
+        ((int)gAisDiagnostic.last_rssi / 2) - 160);
     UI_PrintStringSmallNormal(String, 2, 0, 4);
     sprintf(String, "RF PULSES: %u", gAisDiagnostic.rf_pulses);
     UI_PrintStringSmallNormal(String, 2, 0, 5);
