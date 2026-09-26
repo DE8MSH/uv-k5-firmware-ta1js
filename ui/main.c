@@ -550,7 +550,7 @@ void UI_DisplayMain(void)
     UI_PrintStringSmallBold("AIS RX - LAB ONLY", 2, 0, 0);
     UI_PrintString("162.025", 0, LCD_WIDTH, 1, 8);
     UI_PrintStringSmallNormal("RX ONLY  /  NO TX", 2, 0, 3);
-    UI_PrintStringSmallNormal("GMSK: NO DATA PATH", 2, 0, 4);
+    UI_PrintStringSmallNormal("GMSK: UNVERIFIED", 2, 0, 4);
     UI_PrintStringSmallNormal("AIS DECODE: OFF", 2, 0, 5);
     UI_PrintStringSmallNormal("NO PACKET CLAIMS", 2, 0, 6);
     ST7565_BlitFullScreen();
