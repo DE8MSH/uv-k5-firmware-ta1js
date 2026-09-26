@@ -1,7 +1,8 @@
 # AIS RX — Dr. Heinz Doofenshmirtz (channel B, 162.025 MHz)
 
-**Status: bench probe only. NO working AIS GMSK receiver yet. NO on-air
-decodes and NO real AIS bitstream claimed.** This branch is intentionally
+**Status: on-radio RF pulse diagnostic and optional bench probe only. NO
+working AIS GMSK receiver yet. NO verified AIS messages or real AIS bits
+claimed.** This branch is intentionally
 independent of the production APRS image on `main`.
 
 ## Build and expected first result
@@ -50,6 +51,55 @@ synthetic host test. PTT must be verified to remain disabled before use.
 are blocked in `RADIO_PrepareTX`, `FUNCTION_Select` and `FUNCTION_Transmit`.
 The normal `f4hwn.bin` is produced. Check that it remains under **61,440
 bytes** before considering a flash. Back up the radio's EEPROM first.
+
+## Stage 0: completely on-radio RSSI / RF pulse test — no audio cable
+
+This is now the **primary field test** for anyone without an audio cable
+or external sound interface. Flash the AIS-RX experimental image once
+using the normal UV-K5 firmware flashing method; all subsequent
+monitoring is displayed directly on the radio.
+
+The AIS branch now overrides the normal VFO main screen with:
+
+```text
+AIS RX / RF TEST
+       162.025
+RX ONLY  |  NO TX
+RSSI -110 dBm
+RF PULSES: 0
+NO AIS DECODE YET
+```
+
+These display fields represent a **coarse RSSI envelope test**, not
+digital AIS reception. `app/ais_diag_core.[ch]` checks BK4819 RSSI
+every ~10 ms, tracks the noise floor, and counts isolated RF peaks
+roughly 20–120 ms wide and at least 12 dB above the floor.
+It bridges one sample's brief signal dip, rejects one-tick spikes,
+and rejects long continuous carriers. The screen refreshes about
+five times per second. `utils/ais_diag_test.c` is a deterministic
+host test of the pulse-counting algorithm.
+
+* A positive RF pulse count **cannot** validate AIS, GMSK, NRZI,
+  HDLC, an MMSI, or a particular ship. A nearby interferer could
+  produce exactly the same counter increase.
+* A zero count does **not** prove there are no AIS signals:
+  weak, overlapping, adjacent-channel, or poorly timed bursts may
+  be missed at this slow sampling rate.
+* This diagnostic does not require or collect audio samples, use
+  an ADC, or claim to have found a GMSK symbol stream.
+* The BK4819's documented FSK RX modes remain limited to
+  1.2/2.4-kbps formats. The DP32G030 SAR ADC channels used by this
+  board (`BOARD_ADC_Init`) currently measure battery voltage and
+  battery current, not discriminator audio. Thus, **a usable
+  physical on-device 9.6-kbaud GMSK signal path has not been
+  established**. Without one we cannot turn the existing
+  `app/ais_bits.c` checker into live AIS decoding by software
+  alone.
+
+This is an explicitly limited but independently testable on-device
+milestone. The earlier optional AF9/AF1 plus PC WAV experiment is
+retained for developers; it is **not required** to use the new
+on-radio RSSI display.
 
 ## Stage 1, already implemented
 
