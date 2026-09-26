@@ -141,6 +141,7 @@ void Main(void)
     RADIO_SetupRegisters(true);
 #ifdef ENABLE_AIS_RX
     APP_StartListening(FUNCTION_MONITOR);
+    AIS_RX_LogStatus(); /* show BK4819 readback, not an AIS decode */
 #endif
 
     for (unsigned int i = 0; i < ARRAY_SIZE(gBatteryVoltages); i++)
